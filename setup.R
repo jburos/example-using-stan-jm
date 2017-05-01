@@ -1,6 +1,5 @@
 ## warning: requires R version >= 3.3.0
 install.packages('devtools')
-devtools::install_github('sambrilleman/rstanarm', ref = 'develop2', args = '--preclean', local = TRUE)
 install.packages('rmarkdown')
 install.packages('tidyr')
 install.packages('ggplot2')
@@ -10,5 +9,6 @@ install.packages('stringr') ## without this, docopt install sometimes fails
 install.packages('docopt')
 source("https://bioconductor.org/biocLite.R")
 biocLite("TCGAbiolinks")
+biocLite('maftools')
 install.packages('DT')
-
+devtools::install_github('sambrilleman/rstanarm', ref = 'develop2', args = '--preclean', local = TRUE)
