@@ -1,0 +1,262 @@
+---
+title: "Summarize drug comparison"
+author: "Jacki Novik"
+date: "5/4/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warnings = FALSE)
+library(rstanarm)
+library(ggplot2)
+library(tidyr)
+library(survminer)
+library(dplyr)
+library(scales)
+library(bayesplot)
+```
+
+## Data summary
+
+We are analyzing data from the `aids` dataset, provided by the [JM package](https://cran.r-project.org/web/packages/JM/index.html).
+
+A brief description of the data are provided in the [package documentation](https://rdrr.io/cran/JM/man/aids.html), with more detail in [the original manuscript](https://www.ncbi.nlm.nih.gov/pubmed/8556398).
+
+For our purposes, it's perhaps sufficient know that we are looking at data from a clinical trial published in 1996. This trial enrolled 467 patients with an HIV diagnosis who were either intolerant or resistant to AZT treatment. Patients were randomized to receive one of two drugs - we will call them `ddI` (didanosine) and `ddC` (zalcitabine).
+
+Data are provided in two formats - 
+
+* `aids` contains longitudinal measures (several obs per patient)
+* `aids.id` contains values at time of randomization (one obs per patient)
+
+```{r cars}
+data(aids, package = "JM")
+data(aids.id, package = "JM")
+```
+
+### Survival submodel 
+
+#### Data exploration
+
+Overall, there is differential survival according to treatment.
+
+```{r plot-km-curve, warnings = FALSE}
+aids.id %>%
+  survfit(Surv(Time, death) ~ drug, data = .) %>%
+  ggsurvplot(risk.table = FALSE,
+             risk.table.y.text = FALSE,
+             #ncensor.plot = TRUE,
+             #surv.median.line='v',
+             conf.int = TRUE,
+             size = 0.5, 
+             xlab = 'days',
+             data = aids.id) +
+  ggtitle('Survival among all patients') +
+  scale_y_continuous(labels = percent)
+```
+
+However, this trial enrolled patients according to previous opportunistic infection status (AIDS vs noAIDS) and according to AZT status (intolerance vs resistant). This prior status has pretty important prognostic value and may impact response to therapy.
+
+Here, for example, are survival curves among patients without prior opportunistic infections (ie, no AIDs at time of enrollment).
+
+```{r plot-KM-curve-by-prevOI}
+plot_noaids <- aids.id %>%
+  dplyr::filter(prevOI == 'noAIDS') %>%
+  survfit(Surv(Time, death) ~ drug, data = .) %>%
+  ggsurvplot(risk.table = FALSE,
+             risk.table.y.text = FALSE,
+             #ncensor.plot = TRUE,
+             #surv.median.line='v',
+             conf.int = TRUE,
+             size = 0.5, 
+             xlab = 'days',
+             data = aids.id %>%
+               dplyr::filter(prevOI == 'noAIDS')) +
+  ggtitle('Patients without previous infections (no AIDs)') +
+  scale_y_continuous(labels = percent)
+plot_noaids
+```
+
+By comparison, showing survival among patients with prior opportunitistic infections.
+
+```{r plot-KM-curve-among-aids} 
+plot_aids <- aids.id %>%
+  dplyr::filter(prevOI == 'AIDS') %>%
+  survfit(Surv(Time, death) ~ drug, data = .) %>%
+  ggsurvplot(risk.table = FALSE,
+             risk.table.y.text = FALSE,
+             #ncensor.plot = TRUE,
+             surv.median.line='v',
+             conf.int = TRUE,
+             size = 0.5, 
+             xlab = 'days',
+             data = aids.id %>%
+               dplyr::filter(prevOI == 'AIDS')) +
+  ggtitle('Patients with previous opportunistic infections (AIDs)') +
+  scale_y_continuous(labels = percent)
+plot_aids
+```
+
+Other important indicators include AZT status
+
+```{r plot-KM-by-azt}
+plot_by_azt <- aids.id %>%
+  survfit(Surv(Time, death) ~ AZT, data = .) %>%
+  ggsurvplot(risk.table = FALSE,
+             risk.table.y.text = FALSE,
+             #ncensor.plot = TRUE,
+             surv.median.line='v',
+             conf.int = TRUE,
+             size = 0.5, 
+             xlab = 'days',
+             data = aids.id
+             ) +
+  ggtitle('Among all patients') +
+  scale_y_continuous(labels = percent)
+plot_by_azt
+```
+
+And gender, although the majority of patients enrolled are male.
+
+```{r plot-KM-by-gender}
+plot_by_gender <- aids.id %>%
+  survfit(Surv(Time, death) ~ gender, data = .) %>%
+  ggsurvplot(risk.table = FALSE,
+             risk.table.y.text = FALSE,
+             #ncensor.plot = TRUE,
+             surv.median.line='v',
+             conf.int = TRUE,
+             size = 0.5, 
+             xlab = 'days',
+             data = aids.id
+             ) +
+  ggtitle('Among all patients') +
+  scale_y_continuous(labels = percent)
+plot_by_gender
+```
+
+#### Parameterizing the submodel
+
+Taking these factors into account, we end up with a survival submodel as follows:
+
+```{r survival-submodel}
+surv_form <- as.formula(Surv(Time, death) ~ drug*prevOI + gender + AZT)
+```
+
+which has the following MLE estimates from the standard cox-ph model:
+
+```{r cox-survival-submodel}
+cox.fit <- coxph(surv_form, data = aids.id)
+summary(cox.fit)
+```
+
+#### Including baseline value of longitudinal covariate `CD4`
+
+The longitudinal endpoint of interest here is `CD4` count. CD4+ cells are a type of T cell, and they play a critical part of the immune system function. Their levels are often depressed in aids patients, particularly as the disease progresses.
+
+We thus expect higher levels of CD4 count to be associated with improved survival.
+
+Before considering the longitudinal submodel, we should include the baseline value of `CD4` count in our survival submodel. We do this for two reasons - (1) to sanity check our expectation of improved survival with higher levels of CD4 count, and (2) to see how the inclusion of this covariate impacts our parameter estimates.
+
+```{r cox-survival-submodel-with-CD4}
+cox.fit2 <- coxph(update(surv_form, ~ . + CD4), data = aids.id)
+summary(cox.fit2)
+```
+
+As we suspected, higher `CD4` count is associated with better prognosis in this cohort. It is also notable that the inclusion of this covariate substantially increases the benefit of drug `ddI` (didanosine) over `ddC` (zalcitabine), and lessens the magnitude of association between prior AIDS status and survival, as well as its interaction with the drug effect. 
+
+This would suggest that the impact of prior AIDS on survival is explained at least in part by differences in CD4 levels.
+
+Which is indeed the case.
+
+```{r plot-cd4-baseline-by-prevOI}
+ggplot(aids.id, aes(x = CD4, group = prevOI, colour = prevOI)) +
+  geom_density() +
+  theme_minimal() +
+  ggtitle('CD4 count at baseline by previous OI (opportunistic infection) status')
+```
+
+Cool. At this point, we are ready to investigate the longitudinal submodel.
+
+### Longitudinal submodel
+
+We now begin to investigate the longitudinal (on-treatment) measurements of `CD4` count.
+
+As noted above, we would expect higher levels of CD4 count to be associated with improved survival. We also now expect these measurements (at least at baseline) to be correlated with previous AIDS status.
+
+Here we plot trajectories of CD4 count over the course of treatment for each patient, by previous infection status.
+
+```{r plot-CD4-long}
+ggplot(aids, aes(x = obstime, y = CD4, group = patient, colour = prevOI)) +
+  geom_line(alpha = 0.2) +
+  scale_x_continuous('Days') +
+  theme_minimal() +
+  ggtitle('CD4 count over time per patient, according to previous infection status')
+```
+
+You will notice that timepoints of collection here are highly regular, although we do have some missing values. At each timepoint, there are also waves of censoring in the longitudinal data.
+
+It is customary to use `sqrt(CD4)` when modeling these data instead of CD4. Although it's not strictly necessary for our model, we will proceed with this convention.
+
+```{r compare-cd4-sqrt}
+ggplot(aids2 %>% 
+         dplyr::mutate(`sqrt(CD4)` = sqrt_cd4) %>%
+         tidyr::gather('variable', 'value', CD4, `sqrt(CD4)`),
+       aes(x = value, group = variable, colour = variable)) + 
+  geom_density() +
+  facet_wrap(~variable, scale = 'free') +
+  theme_minimal() +
+  theme(legend.position = 'none')
+```
+
+_TODO fill in details about longitudinal model fit_
+
+We have fit several parameterizations of the longitudinal submodel. 
+
+Using `LOO-PSIS` as a model-comparison criterion, we can sort models from the best fit (`long3`) to the worst (`long0`).
+
+```{r long-compare-models include=FALSE}
+source('analyze_aids_data.longitudinal.R')
+loo_comp_table %>% dplyr::select(model_name, RHS, looic, se_looic) %>% print(right=F)
+```
+
+From the perspective of model comparison, there are a few things to note:
+
+1. The biggest improvements in fit came from:
+    - allowing slope of `CD4` over time to vary by patient (long0 -> long1)
+    - including tx effect & allowing slope of `CD4` over time to vary by tx (long1 -> long2)
+    - including covariate effects of for `prevOI` and `AZT` (long2 -> long3)
+2. There was very little improvement in fit when we included an interaction between the slope of `CD4` (`obstime`) & `prevOI` (long4), whether this was included with or without interactions between drug & `prevOI` or other interaction effects.
+
+I would also note the slight interaction effect between drug (`ddI`) and `obstime`, since any differential survival due to treatment might be mediated by effect of treatment on the rate of change in `CD4`.
+
+Let's summarize the posterior parameter estimates for `long3`.
+
+```{r long-summarize-model}
+long3 <- readRDS(file = file.path(CACHE_DIR, 'long3.rds'))
+print(long3)
+```
+
+While it's important to note that inferences from this model aren't valid (due to data not missing at random), we can still investigate the population-level parameter estimates from the model. Mostly because it will be useful to compare these estimates to those obtained from the joint model.
+
+```{r plot-population-level-parameters}
+bayesplot::mcmc_areas(as.array(long3), pars = colnames(coefficients(long3)$patient)[-1]) + 
+  bayesplot::vline_0() +
+  ggtitle('Posterior parameter estimates for model fit with stan_lmer', subtitle = 'Long3: longitudinal model for assoc with sqrt(CD4) over time (obstime)')
+```
+
+As expected, the CD4 count is generally decreasing in this population -- this is a very sick population (remember this is in 1996!). Also, as expected, having had a prior opportunistic infection (`prevOIAIDS`) leads to lower initial values of `CD4`. Similarly, having had prior AZT failure may confer a worse prognosis.
+
+In order to obtain valid inferences for these parameters, we would need to use the Joint Model which adjusts for the informative censoring due to clinical events.
+
+### Joint model for longitudinal biomarker + survival event data
+
+At this point we are ready to fit the joint model for longitudinal & time-to-event data.
+
+We start with a fit incorporating our work on the individual submodels.
+
+```{r fit-joint-model}
+source('analyze_aids_data.survival.R')
+print(f7)
+```
+
