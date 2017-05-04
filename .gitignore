@@ -4,3 +4,5 @@
 .Ruserdata
 Rlib
 .Rcache
+*.rda
+GDCdata
