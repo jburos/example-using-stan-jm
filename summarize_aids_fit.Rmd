@@ -255,8 +255,103 @@ At this point we are ready to fit the joint model for longitudinal & time-to-eve
 
 We start with a fit incorporating our work on the individual submodels.
 
-```{r fit-joint-model}
-source('analyze_aids_data.survival.R')
+```{r jm-fit}
+#source('analyze_aids_data.survival.R')
+#print(f7)
+## for now, proceed with f3 as if it's f7
+f7 <- readRDS(file.path(CACHE_DIR, 'f3.rds'))
 print(f7)
 ```
+
+Let's see how closely the estimated 'bs' baseline hazard matches our observed KM curves.
+
+```{r jm-ps_check}
+f7.ps_check
+```
+
+#### Summarize parameter estimates graphically
+
+```{r show-coefs-long}
+bayesplot::mcmc_areas(as.array(f7), regex_pars = '^Long1\\|[^(Intercept)|sigma]') + 
+  bayesplot::vline_0() +
+  ggtitle('Posterior parameter estimates for model fit with stan_jm', subtitle = 'f7: longitudinal submodel for assoc with sqrt(CD4) over time (obstime)')
+```
+
+Here we see increased *hazard* (worse survival) with prior opportunistic infections, prior AZT failure, and treatment with `ddI` (didanosine).
+
+There is better overall survival among men than women, but there isn't a lot of confidence in this signal. 
+
+These coefficient estimates are consistent with what we saw in the exploratory analysis & the MLE estimates obtained using `coxph`.
+
+```{r show-coefs-event}
+bayesplot::mcmc_areas(as.array(f7), regex_pars = '^Event\\|[^basehaz]') + 
+  bayesplot::vline_0() +
+  ggtitle('Posterior parameter estimates for model fit with stan_jm',
+          subtitle = 'Event submodel for hazard of mortality')
+```
+
+Let's look at the coefficients for `Assoc`, which relates the longitudinal submodel to the event submodel.
+
+```{r show-coefs-assoc}
+bayesplot::mcmc_areas(as.array(f7), regex_pars = '^Assoc\\|') + 
+  bayesplot::vline_0() +
+  ggtitle('Posterior parameter estimates for model fit with stan_jm',
+          subtitle = 'Association between longitudinal submodel & event submodel (hazard)')
+```
+
+We see a very narrow but somewhat certain association of `etavalue` (the current value at any time of `CD4` count) and subsequent mortality. This is an inverse association, so that higher `CD4` counts yield improved survival (as we expect). 
+
+There is also a weak but plausible trend towards improved survival with increasing slopes of `CD4` count.
+
+Finally we look at the longitudinal submodel coefficients.
+
+```{r show-coefs-long}
+bayesplot::mcmc_areas(as.array(f7), regex_pars = '^Long1\\|[^(Intercept)|sigma]') + 
+  bayesplot::vline_0() +
+  ggtitle('Posterior parameter estimates for model fit with stan_jm',
+          subtitle = 'Longitudinal submodel for sqrt(CD4) change over time (obstime)')
+```
+
+#### Compare long-model coefficients 
+
+Next we compare coefficient values from the longitudinal model fit to their counterparts in the `stan_jm` fit.
+
+```{r compare-coefs-long}
+p_joint <- bayesplot::mcmc_areas(as.array(f7), regex_pars = '^Long1\\|[^(Intercept)|sigma]') + 
+  bayesplot::vline_0() +
+  ggtitle('Fit within Joint Model')
+
+p_long <- bayesplot::mcmc_areas(as.array(long3), pars = colnames(coefficients(long3)$patient)[-1]) + 
+  bayesplot::vline_0() +
+  ggtitle('Fit as standalone')
+
+bayesplot::bayesplot_grid(p_joint, p_long,
+                          grid_args = list(ncol = 2),
+                          xlim = c(-1.2, 0.5))
+```
+
+## The decision problem
+
+Now we get to the crux of the issue - namely, informing the treatment plan for an individual patient. 
+
+Given the model, you might think that we could simply trat all patients with `ddC`, since `ddI` is associated with higher hazard for mortality. 
+
+However, the picture may not be that simple.
+
+Consider:
+
+1. The survival benefit of `ddC` over `ddI` may not be the same over all patients.
+    - There may be a subset of patients for whom `ddI` is just as good as `ddC`
+    - There may also be a subset of patients for whom `ddI` is better than `ddC`
+    - The relative benefit of each drug may _change_ over the course of treatment
+2. In addition, survival is not the only outcome to consider.
+    - The side-effects from the two drugs may not be comparable
+    - The risk of adverse events may vary by patient, and/or by drug
+    - The two drugs may not have the same cost
+
+In practice, we want to consider all of these factors when making a treatment decision. 
+
+### Is the benefit of `ddC` over `ddI` the same for all patients?
+
+### Example for one patient
 
