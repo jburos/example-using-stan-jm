@@ -87,7 +87,7 @@ filename = 'f4.rds')
 
 # .. skipped models f5 & f6
 
-f7 <- with_filecache(stan_jm(formulaLong = sqrt_cd4 ~ obstime + drug + obstime:drug + (1 + obstime | patient),
+f7 <- with_filecache(stan_jm(formulaLong = sqrt_cd4 ~ obstime + drug + obstime:drug + gender + prevOI + AZT + (1 + obstime | patient),
                              dataLong = aids2,
                              time_var = 'obstime',
                              formulaEvent = Surv(Time, death) ~ drug + prevOI + drug:prevOI + gender + AZT,
@@ -98,7 +98,7 @@ f7 <- with_filecache(stan_jm(formulaLong = sqrt_cd4 ~ obstime + drug + obstime:d
                              adapt_delta = 0.999
 ), filename = 'f7.rds')
 
-f8 <- with_filecache(stan_jm(formulaLong = sqrt_cd4 ~ obstime + drug + obstime:drug + (1 + obstime | patient),
+f8 <- with_filecache(stan_jm(formulaLong = sqrt_cd4 ~ obstime + drug + obstime:drug + gender + prevOI + AZT + (1 + obstime | patient),
                              dataLong = aids2,
                              time_var = 'obstime',
                              formulaEvent = Surv(Time, death) ~ drug + prevOI + drug:prevOI + gender + AZT + CD4,
@@ -125,3 +125,8 @@ f8.loo <- with_filecache(loo(f8),
                          filename = 'f8.loo.rds')
 
 loo_comp <- loo::compare(f0.loo, f1.loo, f2.loo, f3.loo, f4.loo, f7.loo, f8.loo)
+
+f7.ps_check <- with_filecache(rstanarm::ps_check(f7),
+                              filename = 'f7.ps_check.rds')
+
+
