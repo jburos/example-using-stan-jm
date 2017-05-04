@@ -2,7 +2,9 @@
 title: "Summarize drug comparison"
 author: "Jacki Novik"
 date: "5/4/2017"
-output: html_document
+output: 
+  - github_document
+  - html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -14,6 +16,8 @@ library(survminer)
 library(dplyr)
 library(scales)
 library(bayesplot)
+source('analyze_aids_data.longitudinal.without_kfold.R')
+#source('analyze_aids_data.survival.R')
 ```
 
 ## Data summary
@@ -215,8 +219,7 @@ We have fit several parameterizations of the longitudinal submodel.
 
 Using `LOO-PSIS` as a model-comparison criterion, we can sort models from the best fit (`long3`) to the worst (`long0`).
 
-```{r long-compare-models include=FALSE}
-source('analyze_aids_data.longitudinal.R')
+```{r long-compare-models}
 loo_comp_table %>% dplyr::select(model_name, RHS, looic, se_looic) %>% print(right=F)
 ```
 
@@ -256,7 +259,7 @@ At this point we are ready to fit the joint model for longitudinal & time-to-eve
 We start with a fit incorporating our work on the individual submodels.
 
 ```{r jm-fit}
-#source('analyze_aids_data.survival.R')
+# TODO revert to f7 once that run has finished
 #print(f7)
 ## for now, proceed with f3 as if it's f7
 f7 <- readRDS(file.path(CACHE_DIR, 'f3.rds'))
@@ -266,7 +269,8 @@ print(f7)
 Let's see how closely the estimated 'bs' baseline hazard matches our observed KM curves.
 
 ```{r jm-ps_check}
-f7.ps_check
+# TODO uncomment once run has finished
+# f7.ps_check
 ```
 
 #### Summarize parameter estimates graphically
@@ -302,15 +306,6 @@ bayesplot::mcmc_areas(as.array(f7), regex_pars = '^Assoc\\|') +
 We see a very narrow but somewhat certain association of `etavalue` (the current value at any time of `CD4` count) and subsequent mortality. This is an inverse association, so that higher `CD4` counts yield improved survival (as we expect). 
 
 There is also a weak but plausible trend towards improved survival with increasing slopes of `CD4` count.
-
-Finally we look at the longitudinal submodel coefficients.
-
-```{r show-coefs-long}
-bayesplot::mcmc_areas(as.array(f7), regex_pars = '^Long1\\|[^(Intercept)|sigma]') + 
-  bayesplot::vline_0() +
-  ggtitle('Posterior parameter estimates for model fit with stan_jm',
-          subtitle = 'Longitudinal submodel for sqrt(CD4) change over time (obstime)')
-```
 
 #### Compare long-model coefficients 
 
