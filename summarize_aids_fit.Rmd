@@ -223,7 +223,7 @@ loo_comp_table %>% dplyr::select(model_name, description) %>% arrange(model_name
 
 Using `LOO-PSIS` as a model-comparison criterion, we can sort models from the best fit (`long3`) to the worst (`long0`).
 
-```{r long-describe-models}
+```{r long-compare-models}
 loo_comp_table %>% dplyr::select(model_name, looic, se_looic) %>% print(right=F)
 ```
 
@@ -285,6 +285,58 @@ bayesplot::mcmc_areas(as.array(f7), pars = paste('Long1', colnames(coefficients(
 
 Here we see increased *hazard* (worse survival) with prior opportunistic infections, prior AZT failure, and treatment with `ddI` (didanosine).
 
+For example, the typical trajectory for a patient varies according to `prevOI` and `obstime`, with very little variation due to treatment.
+
+```{r}
+newdata <- purrr::cross_d(list(prevOI = c('AIDS', 'noAIDS'),
+                       obstime = aids2 %>% dplyr::distinct(obstime) %>% unlist(),
+                       drug = c('ddI', 'ddC')
+                       )) 
+
+newdata.id <- newdata %>%
+  dplyr::distinct(prevOI, drug) %>%
+  dplyr::mutate(patient = 2000 + row_number()) %>%
+  dplyr::mutate(gender = 'male',
+                AZT = 'failure')
+
+newdata <- newdata %>%
+  dplyr::inner_join(newdata.id, by = c('prevOI', 'drug'))
+
+pplong <- posterior_predict(
+  f7,
+  m = 1,
+  newdata = newdata
+)
+pplong_df <- newdata %>%
+  dplyr::bind_cols(as.data.frame(posterior_interval(pplong))) %>%
+  dplyr::bind_cols(as.data.frame(posterior_interval(pplong, prob = 0.01))) %>%
+  dplyr::mutate(median = (`49.5%` + `50.5%`)/2)
+
+ggplot(pplong_df, aes(x = obstime, y = median, colour = drug, group = drug)) +
+  geom_line() +
+  facet_wrap(~prevOI) +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`, colour = NULL, fill = drug), alpha = 0.2) +
+  theme_minimal() +
+  ggtitle('Posterior predicted values for prevOI X drug interaction') +
+  scale_x_continuous('Months') +
+  scale_y_continuous('sqrt(CD4)')
+```
+
+```{r, eval=FALSE, include=FALSE}
+# doesn't work for some reason
+if (TRUE == FALSE) {
+  ppsurv <- rstanarm::posterior_survfit(f7,
+                                        newdataEvent = newdata.id,
+                                        newdataLong = newdata,
+                                        standardise = FALSE,
+                                        times = 0,
+                                        extrapolate = TRUE,
+                                        control = list(condition = FALSE),
+                                        draws = 200
+  )
+}
+```
+
 There is better overall survival among men than women, but there isn't a lot of confidence in this signal. 
 
 These coefficient estimates are consistent with what we saw in the exploratory analysis & the MLE estimates obtained using `coxph`.
@@ -327,6 +379,51 @@ bayesplot::bayesplot_grid(p_joint, p_long,
                           xlim = c(-1.2, 0.5))
 ```
 
+### Summarizing model for example patients
+
+At the population level, how is the outcome different among patients with an AIDS diagnosis, depending on treatment?
+
+Here we will consider only data known at baseline, then draw from the posterior predictive distribution under two treatment scenarios.
+
+```{r summ-drug-effect-aids}
+with_aids <- aids2 %>% 
+  dplyr::filter(obstime == min(obstime)) %>%
+  dplyr::filter(prevOI == 'AIDS')
+
+with_aids_ddI <- with_aids %>%
+  dplyr::filter(drug == 'ddI')
+with_aids_ddI.id <- aids.id %>%
+  dplyr::semi_join(with_aids_ddI, by='patient')
+
+with_aids_ddC <- with_aids %>%
+  dplyr::filter(drug == 'ddI')
+with_aids_ddC.id <- aids.id %>%
+  dplyr::semi_join(with_aids_ddC, by='patient')
+
+with_aids_ddI_ppsurv <- with_filecache(
+  rstanarm::posterior_survfit(
+    f7,
+    newdataLong = with_aids_ddI,
+    newdataEvent = with_aids_ddI.id,
+    standardise = TRUE,
+    times = 0,
+    extrapolate = TRUE,
+    control = list(condition = FALSE)
+  ), filename = 'f7.posterior_survfit.with_aids_ddI.rds')
+
+with_aids_ddC_ppsurv <- with_filecache(
+  rstanarm::posterior_survfit(
+    f7,
+    newdataLong = with_aids_ddC,
+    newdataEvent = with_aids_ddC.id,
+    standardise = TRUE,
+    times = 0,
+    extrapolate = TRUE,
+    control = list(condition = FALSE)
+  ), filename = 'f7.posterior_survfit.with_aids_ddC.rds')
+```
+
+
 ## The decision problem
 
 Now we get to the crux of the issue - namely, informing the treatment plan for an individual patient. 
@@ -335,7 +432,7 @@ Given the model, you might think that we could simply treat all patients with `d
 
 However, the picture may not be that simple. 
 
-First, the model is not simple. We have an interaction effect between treatment status & prevOI, but we also have slightly higher `CD4` counts with `ddI` (which is associated with improved survival) and slightly higher hazard with `ddI` (which is thus associated with worse survival). Our model also measures the drug effect _holding all other covariates equal_ .. including `CD4` count. But `CD4` count as we have seen often varies over time and across patients.
+First, the model is not simple. We have an interaction effect between treatment status & prevOI, but we also have slightly higher `CD4` counts with `ddI` (which is associated with improved survival) and slightly higher hazard with `ddI` (which is thus associated with worse survival). Our model also measures the drug effect _holding all other covariates equal_ .. including `CD4` count. But `CD4` count as we have seen often varies over time and differently for different patients.
 
 Second, even if our model _were_ simple, the decision problem is itself complex.
 
@@ -356,23 +453,256 @@ In practice, we want to consider all of these factors when making a treatment de
 
 For lack of a better name, we will call this first problem 'heterogenous treatment effects'. We will call the second problem the 'decision problem'.
 
+#### Plot expected survival over time
+
 To start with a simple example, let's consider the case for a single patient. 
 
-```{r example-patient}
-# patient_id <- XX
+```{r example-patients-baseline}
+patient_ids <- aids.id %>% 
+  dplyr::group_by(prevOI) %>%
+  dplyr::distinct(patient) %>% 
+  dplyr::sample_n(3) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-prevOI)
 
-# get data for this patient
+# get data for this patient at baseline
+patient_data <- aids2 %>%
+  dplyr::semi_join(patient_ids, by='patient') %>%
+  dplyr::filter(obstime == min(obstime))
 
-# restrict to baseline data only
+patient_data.id <- aids.id %>%
+  dplyr::semi_join(patient_ids, by='patient')
 
-# create fictional record with alternate treatment 
+# create fictional records with alternate treatment 
+patient_data_alt <- patient_data %>% 
+                     dplyr::mutate(drug = ifelse(drug == 'ddI', 'ddC', 'ddI'))
+patient_data_alt.id <- patient_data.id %>% 
+                     dplyr::mutate(drug = ifelse(drug == 'ddI', 'ddC', 'ddI'))
 
-# simulate data
+# posterior-predicted survival for observed scenario
+patient_ppsurv <- with_filecache(
+  rstanarm::posterior_survfit(
+    f7,
+    newdataLong = patient_data,
+    newdataEvent = patient_data.id,
+    standardise = FALSE,
+    times = 0,
+    extrapolate = TRUE,
+    control = list(condition = FALSE)
+  ), filename = paste0('f7.posterior_survfit2.treated_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
 
-# plot expected survival under two scenarios
+# posterior-predicted survival for alternate scenario
+patient_ppsurv_alt <- with_filecache(
+  rstanarm::posterior_survfit(
+    f7,
+    newdataLong = patient_data_alt,
+    newdataEvent = patient_data_alt.id,
+    standardise = FALSE,
+    times = 0,
+    extrapolate = TRUE,
+    control = list(condition = FALSE)
+  ), filename = paste0('f7.posterior_survfit2.alt_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
 
+# prepare posterior predictive densities of survival
+surv_density <- attr(patient_ppsurv, 'surv')
+surv_density_alt <- attr(patient_ppsurv_alt, 'surv')
+surv_density_data <- list()
+surv_density_data_alt <- list()
+surv_density_times <- dplyr::distinct(patient_ppsurv, obstime) %>% unlist()
+for (t in seq_len(length(surv_density))) {
+  surv_time <- surv_density_times[[t]]
+  surv_density_data[[t]] <- tbl_df(surv_density[[t]]) %>%
+    dplyr::mutate(iter = row_number()) %>%
+    tidyr::gather(patient, prop_survival, -iter) %>%
+    dplyr::mutate(obstime = surv_time) %>%
+    dplyr::left_join(patient_data.id %>% dplyr::select(-obstime),
+                     by = 'patient')
+  surv_density_data_alt[[t]] <- tbl_df(surv_density_alt[[t]]) %>%
+    dplyr::mutate(iter = row_number()) %>%
+    tidyr::gather(patient, prop_survival, -iter) %>%
+    dplyr::mutate(obstime = surv_time) %>%
+    dplyr::left_join(patient_data_alt.id %>% dplyr::select(-obstime),
+                     by = 'patient')
+}
+surv_density_df <- dplyr::bind_rows(surv_density_data) %>% 
+  dplyr::bind_rows(dplyr::bind_rows(surv_density_data_alt)) %>%
+  dplyr::group_by(iter, patient, drug) %>%
+  dplyr::mutate(prev_prop_survival = lag(prop_survival, order_by=desc(obstime), n=1, default = 0)) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(one = 1) %>%
+  dplyr::full_join(tbl_df(list(prob = seq(from = 0, to = 1, by = 0.01), one = 1)), by = 'one') %>%
+  dplyr::filter(prob >= prev_prop_survival & prob <= prop_survival) %>%
+  dplyr::arrange(patient, drug, iter, prob)
+```
+
+```{r example-patients-baseline-plot-predcurve}
+# plot expected survival probabilities under two scenarios
+patient_ppsurv %>%
+  dplyr::left_join(patient_data.id %>% dplyr::select(-obstime), by = 'patient') %>%
+  dplyr::bind_rows(patient_ppsurv_alt %>%
+                     dplyr::left_join(patient_data_alt.id %>% dplyr::select(-obstime), by = 'patient')
+                   ) %>%
+  dplyr::arrange(prevOI, patient) %>%
+  ggplot(., aes(x = obstime, y = survpred, group = drug, colour = drug)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = ci_lb, ymax = ci_ub, fill = drug, colour = NULL), alpha = 0.4) +
+  facet_wrap(prevOI~patient) +
+  theme_minimal() +
+  scale_x_continuous('Months following treatment') +
+  scale_y_continuous('Survival probability', labels = percent)
+  
+```
+
+```{r example-patients-baseline-plot-predsurv}
+surv_density_df %>%
+  dplyr::arrange(prevOI, patient) %>%
+ggplot(., aes(x = obstime, group = drug, colour = drug)) + 
+  geom_density() +
+  theme_minimal() +
+  facet_wrap(prevOI~patient) +
+  scale_x_continuous('Posterior predicted survival (months)')
+```
+
+#### plot expected CD4 counts over time
+
+```{r}
+# prepare predicted cd4 counts under each scenario
+patient_ppdata <- with_filecache(
+  rstanarm::posterior_predict(
+    f7,
+    m = 1,
+    newdata = patient_data %>% 
+      dplyr::select(-obstime) %>%
+      mutate(one = 1) %>%
+      dplyr::full_join(tbl_df(list(obstime = surv_density_times)) %>% dplyr::mutate(one = 1),
+                       by='one') %>% 
+      dplyr::arrange(patient, obstime)
+  ), filename = paste0('f7.posterior_predict2.treated_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
+
+# posterior-predicted survival for alternate scenario
+patient_ppdata_alt <- with_filecache(
+  rstanarm::posterior_predict(
+    f7,
+    m = 1,
+    newdata = patient_data_alt %>%
+      dplyr::select(-obstime) %>%
+      mutate(one = 1) %>%
+      dplyr::full_join(tbl_df(list(obstime = surv_density_times)) %>% dplyr::mutate(one = 1),
+                       by='one') %>% 
+      dplyr::arrange(patient, obstime)
+  ), filename = paste0('f7.posterior_predict2.alt_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
+
+
+patient_ppint_alt <- patient_data_alt %>% 
+  dplyr::select(-obstime) %>%
+  dplyr::mutate(one = 1) %>%
+  dplyr::full_join(tbl_df(list(obstime = surv_density_times, one = 1)), by = 'one') %>%
+  dplyr::arrange(patient, obstime) %>%
+  dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata_alt))) %>%
+  dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata_alt, prob = 0.01))) %>%
+  dplyr::mutate(median = (`50.5%` + `49.5%`)/2)
+
+patient_ppint <- patient_data %>%
+  dplyr::select(-obstime) %>%
+  dplyr::mutate(one = 1) %>%
+  dplyr::full_join(tbl_df(list(obstime = surv_density_times, one = 1)), by = 'one') %>%
+  dplyr::arrange(patient, obstime) %>%
+  dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata))) %>%
+  dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata_alt, prob = 0.01))) %>%
+  dplyr::mutate(median = (`50.5%` + `49.5%`)/2)
+
+```
+
+```{r}
 # plot expected `CD4` counts under two scenarios
+patient_ppint %>% 
+  dplyr::bind_rows(patient_ppint_alt) %>%
+  ggplot(., aes(x = obstime, y = median, group = drug, colour = drug)) + 
+  geom_line() +
+  facet_wrap(prevOI ~ patient) +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`, colour = NULL, fill = drug), alpha = 0.2)
 ```
 
 ### Is the benefit of `ddC` over `ddI` the same for all patients?
 
+## Look at model `f8`
+
+```{r}
+f8 <- readRDS(file.path(CACHE_DIR, 'f8.rds'))
+print(f8)
+```
+
+```{r}
+# posterior-predicted survival for observed scenario
+patient_ppsurv8 <- with_filecache(
+  rstanarm::posterior_survfit(
+    f8,
+    newdataLong = patient_data,
+    newdataEvent = patient_data.id,
+    standardise = FALSE,
+    times = 0,
+    extrapolate = TRUE,
+    control = list(condition = FALSE)
+  ), filename = paste0('f8.posterior_survfit2.treated_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
+
+# posterior-predicted survival for alternate scenario
+patient_ppsurv_alt8 <- with_filecache(
+  rstanarm::posterior_survfit(
+    f8,
+    newdataLong = patient_data_alt,
+    newdataEvent = patient_data_alt.id,
+    standardise = FALSE,
+    times = 0,
+    extrapolate = TRUE,
+    control = list(condition = FALSE)
+  ), filename = paste0('f8.posterior_survfit2.alt_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
+
+# prepare posterior predictive densities of survival
+surv_density <- attr(patient_ppsurv, 'surv')
+surv_density_alt <- attr(patient_ppsurv_alt, 'surv')
+surv_density_data <- list()
+surv_density_data_alt <- list()
+surv_density_times <- dplyr::distinct(patient_ppsurv, obstime) %>% unlist()
+for (t in seq_len(length(surv_density))) {
+  surv_time <- surv_density_times[[t]]
+  surv_density_data[[t]] <- tbl_df(surv_density[[t]]) %>%
+    dplyr::mutate(iter = row_number()) %>%
+    tidyr::gather(patient, prop_survival, -iter) %>%
+    dplyr::mutate(obstime = surv_time) %>%
+    dplyr::left_join(patient_data.id %>% dplyr::select(-obstime),
+                     by = 'patient')
+  surv_density_data_alt[[t]] <- tbl_df(surv_density_alt[[t]]) %>%
+    dplyr::mutate(iter = row_number()) %>%
+    tidyr::gather(patient, prop_survival, -iter) %>%
+    dplyr::mutate(obstime = surv_time) %>%
+    dplyr::left_join(patient_data_alt.id %>% dplyr::select(-obstime),
+                     by = 'patient')
+}
+surv_density_df8 <- dplyr::bind_rows(surv_density_data) %>% 
+  dplyr::bind_rows(dplyr::bind_rows(surv_density_data_alt)) %>%
+  dplyr::group_by(iter, patient, drug) %>%
+  dplyr::mutate(prev_prop_survival = lag(prop_survival, order_by=desc(obstime), n=1, default = 0)) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(one = 1) %>%
+  dplyr::full_join(tbl_df(list(prob = seq(from = 0, to = 1, by = 0.01), one = 1)), by = 'one') %>%
+  dplyr::filter(prob >= prev_prop_survival & prob <= prop_survival) %>%
+  dplyr::arrange(patient, drug, iter, prob)
+```
+
+```{r example-patients-baseline-plot-predcurve-f8}
+# plot expected survival probabilities under two scenarios
+patient_ppsurv8 %>%
+  dplyr::left_join(patient_data.id %>% dplyr::select(-obstime), by = 'patient') %>%
+  dplyr::bind_rows(patient_ppsurv_alt8 %>%
+                     dplyr::left_join(patient_data_alt.id %>% dplyr::select(-obstime), by = 'patient')
+                   ) %>%
+  dplyr::arrange(prevOI, patient) %>%
+  ggplot(., aes(x = obstime, y = survpred, group = drug, colour = drug)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = ci_lb, ymax = ci_ub, fill = drug, colour = NULL), alpha = 0.4) +
+  facet_wrap(prevOI~patient) +
+  theme_minimal() +
+  scale_x_continuous('Months following treatment') +
+  scale_y_continuous('Survival probability', labels = percent)
+  
+```
