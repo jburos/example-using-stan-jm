@@ -451,8 +451,9 @@ print(f7)
 Let's see how closely the estimated 'bs' baseline hazard matches our observed KM curves.
 
 ``` r
-# TODO uncomment once run has finished
-# f7.ps_check
+## TODO uncomment once finished
+#f7.ps_check <- readRDS(file.path(CACHE_DIR, 'f7.ps_check.rds'))
+#f7.ps_check
 ```
 
 #### Summarize parameter estimates graphically
@@ -564,6 +565,16 @@ bayesplot::bayesplot_grid(p_joint, p_long,
 At the population level, how is the outcome different among patients with an AIDS diagnosis, depending on treatment?
 
 Here we will consider only data known at baseline, then draw from the posterior predictive distribution under two treatment scenarios.
+
+``` r
+ggplot(with_aids_ddI_ppsurv %>% dplyr::mutate(drug = 'ddI', prevOI = 'AIDS') %>%
+         dplyr::bind_cols(with_aids_ddC_ppsurv %>% dplyr::mutate(drug = 'ddC', prevOI = 'AIDS')),
+       aes(x = obstime, y = survpred, group = drug, colour = drug)) +
+  geom_line() +
+  facet_wrap(~prevOI)
+```
+
+![](summarize_aids_fit_files/figure-markdown_github/summ-drug-effect-aids-1.png)
 
 The decision problem
 --------------------
