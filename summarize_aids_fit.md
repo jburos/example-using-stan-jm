@@ -37,7 +37,7 @@ aids.id %>%
              #surv.median.line='v',
              conf.int = TRUE,
              size = 0.5, 
-             xlab = 'days',
+             xlab = 'months',
              data = aids.id) +
   ggtitle('Survival among all patients') +
   scale_y_continuous(labels = percent)
@@ -62,7 +62,7 @@ plot_noaids <- aids.id %>%
              #surv.median.line='v',
              conf.int = TRUE,
              size = 0.5, 
-             xlab = 'days',
+             xlab = 'months',
              data = aids.id %>%
                dplyr::filter(prevOI == 'noAIDS')) +
   ggtitle('Patients without previous infections (no AIDs)') +
@@ -90,7 +90,7 @@ plot_aids <- aids.id %>%
              surv.median.line='v',
              conf.int = TRUE,
              size = 0.5, 
-             xlab = 'days',
+             xlab = 'months',
              data = aids.id %>%
                dplyr::filter(prevOI == 'AIDS')) +
   ggtitle('Patients with previous opportunistic infections (AIDs)') +
@@ -117,7 +117,7 @@ plot_by_azt <- aids.id %>%
              surv.median.line='v',
              conf.int = TRUE,
              size = 0.5, 
-             xlab = 'days',
+             xlab = 'months',
              data = aids.id
              ) +
   ggtitle('Among all patients') +
@@ -144,7 +144,7 @@ plot_by_gender <- aids.id %>%
              surv.median.line='v',
              conf.int = TRUE,
              size = 0.5, 
-             xlab = 'days',
+             xlab = 'months',
              data = aids.id
              ) +
   ggtitle('Among all patients') +
@@ -272,7 +272,7 @@ Here we plot trajectories of CD4 count over the course of treatment for each pat
 ``` r
 ggplot(aids, aes(x = obstime, y = CD4, group = patient, colour = prevOI)) +
   geom_line(alpha = 0.2) +
-  scale_x_continuous('Days') +
+  scale_x_continuous('months') +
   theme_minimal() +
   ggtitle('CD4 count over time per patient, according to previous infection status')
 ```
@@ -296,40 +296,45 @@ ggplot(aids2 %>%
 
 ![](summarize_aids_fit_files/figure-markdown_github/compare-cd4-sqrt-1.png)
 
-*TODO fill in details about longitudinal model fit*
+Here we are fitting a longitudinal submodel of the form:
 
-We have fit several parameterizations of the longitudinal submodel.
+\_ TODO describe long submodel \_
+
+We have fit several parameterizations of the longitudinal submodel using `rstanarm::stan_glmer`
+
+``` r
+loo_comp_table %>% dplyr::select(model_name, description) %>% arrange(model_name) %>% dplyr::filter(model_name != 'long6') %>% print(right=F)
+```
+
+    ##   model_name
+    ## 1 long0     
+    ## 2 long1     
+    ## 3 long2     
+    ## 4 long3     
+    ## 5 long4     
+    ## 6 long5     
+    ##   description                                                                                                               
+    ## 1 sqrt(CD4) ~ obstime + (1 | patient)                                                                                       
+    ## 2 sqrt(CD4) ~ obstime + (1 + obstime | patient)                                                                             
+    ## 3 sqrt(CD4) ~ obstime * drug + (1 + obstime | patient)                                                                      
+    ## 4 sqrt(CD4) ~ obstime + drug + obstime:drug + gender + prevOI + AZT + (1 + obstime | patient)                               
+    ## 5 sqrt(CD4) ~ obstime + drug + obstime:drug + prevOI + obstime:prevOI + gender + AZT + (1 + obstime | patient)              
+    ## 6 sqrt(CD4) ~ obstime + drug + obstime:drug + prevOI + obstime:prevOI + drug:prevOI + gender + AZT + (1 + obstime | patient)
 
 Using `LOO-PSIS` as a model-comparison criterion, we can sort models from the best fit (`long3`) to the worst (`long0`).
 
 ``` r
-loo_comp_table %>% dplyr::select(model_name, RHS, looic, se_looic) %>% print(right=F)
+loo_comp_table %>% dplyr::select(model_name, looic, se_looic) %>% print(right=F)
 ```
 
-    ##   model_name
-    ## 1 long3     
-    ## 2 long2     
-    ## 3 long5     
-    ## 4 long4     
-    ## 5 long6     
-    ## 6 long1     
-    ## 7 long0     
-    ##   RHS                                                                                                           
-    ## 1 obstime + drug + obstime:drug + gender + prevOI + AZT + (1 + obstime | patient)                               
-    ## 2 obstime * drug + (1 + obstime | patient)                                                                      
-    ## 3 obstime + drug + obstime:drug + prevOI + obstime:prevOI + drug:prevOI + gender + AZT + (1 + obstime | patient)
-    ## 4 obstime + drug + obstime:drug + prevOI + obstime:prevOI + gender + AZT + (1 + obstime | patient)              
-    ## 5 obstime + drug + obstime:drug + prevOI + obstime:prevOI + gender + AZT + (1 + obstime | patient)              
-    ## 6 obstime + (1 + obstime | patient)                                                                             
-    ## 7 obstime + (1 | patient)                                                                                       
-    ##   looic    se_looic
-    ## 1 1926.718 91.69184
-    ## 2 1930.031 90.83887
-    ## 3 1930.792 92.13360
-    ## 4 1932.482 92.60514
-    ## 5 1933.828 91.95204
-    ## 6 1952.837 93.82012
-    ## 7 2044.633 94.16735
+    ##   model_name looic    se_looic
+    ## 1 long3      1926.718 91.69184
+    ## 2 long2      1930.031 90.83887
+    ## 3 long5      1930.792 92.13360
+    ## 4 long4      1932.482 92.60514
+    ## 5 long6      1933.828 91.95204
+    ## 6 long1      1952.837 93.82012
+    ## 7 long0      2044.633 94.16735
 
 From the perspective of model comparison, there are a few things to note:
 
@@ -399,49 +404,48 @@ At this point we are ready to fit the joint model for longitudinal & time-to-eve
 We start with a fit incorporating our work on the individual submodels.
 
 ``` r
-# TODO revert to f7 once that run has finished
-#print(f7)
-## for now, proceed with f3 as if it's f7
-f7 <- readRDS(file.path(CACHE_DIR, 'f3.rds'))
+f7 <- readRDS(file.path(CACHE_DIR, 'f7.rds'))
 print(f7)
 ```
 
     ## stan_jm(formulaLong = sqrt_cd4 ~ obstime + drug + obstime:drug + 
     ##     gender + prevOI + AZT + (1 + obstime | patient), dataLong = aids2, 
-    ##     formulaEvent = Surv(Time, death) ~ gender + drug + prevOI + 
-    ##         AZT, dataEvent = aids.id, time_var = "obstime", assoc = c("etavalue", 
-    ##         "etaslope"), basehaz = "bs", chains = 4, adapt_delta = 0.999)
+    ##     formulaEvent = Surv(Time, death) ~ drug + prevOI + drug:prevOI + 
+    ##         gender + AZT, dataEvent = aids.id, time_var = "obstime", 
+    ##     assoc = c("etavalue", "etaslope"), basehaz = "bs", chains = 4, 
+    ##     adapt_delta = 0.999)
     ## 
     ## Longitudinal submodel: sqrt_cd4
     ##                 Median MAD_SD
-    ## (Intercept)      3.087  0.128
+    ## (Intercept)      3.080  0.136
     ## obstime         -0.042  0.005
-    ## drugddI          0.060  0.074
-    ## gendermale      -0.006  0.125
-    ## prevOIAIDS      -0.859  0.093
-    ## AZTfailure      -0.083  0.090
-    ## obstime:drugddI  0.004  0.006
-    ## sigma            0.371  0.011
+    ## drugddI          0.061  0.074
+    ## gendermale      -0.002  0.135
+    ## prevOIAIDS      -0.870  0.091
+    ## AZTfailure      -0.072  0.092
+    ## obstime:drugddI  0.004  0.007
+    ## sigma            0.370  0.011
     ## 
     ## Event submodel:
-    ##                Median MAD_SD exp(Median)
-    ## gendermale     -0.380  0.278  0.684     
-    ## drugddI         0.372  0.166  1.451     
-    ## prevOIAIDS      0.729  0.257  2.072     
-    ## AZTfailure      0.146  0.172  1.157     
-    ## Long1|etavalue -0.941  0.135  0.390     
-    ## Long1|etaslope -5.198  5.558  0.006     
-    ## basehaz-coef1  -4.070  0.800     NA     
-    ## basehaz-coef2  -1.549  0.734     NA     
-    ## basehaz-coef3  -3.264  0.702     NA     
-    ## basehaz-coef4  -1.040  0.773     NA     
-    ## basehaz-coef5  -3.112  0.974     NA     
-    ## basehaz-coef6  -1.959  1.439     NA     
+    ##                    Median MAD_SD exp(Median)
+    ## drugddI             1.171  0.405  3.225     
+    ## prevOIAIDS          1.301  0.392  3.672     
+    ## gendermale         -0.337  0.254  0.714     
+    ## AZTfailure          0.131  0.173  1.140     
+    ## drugddI:prevOIAIDS -0.960  0.448  0.383     
+    ## Long1|etavalue     -0.957  0.142  0.384     
+    ## Long1|etaslope     -3.662  5.712  0.026     
+    ## basehaz-coef1      -4.504  0.846     NA     
+    ## basehaz-coef2      -1.985  0.776     NA     
+    ## basehaz-coef3      -3.670  0.763     NA     
+    ## basehaz-coef4      -1.447  0.786     NA     
+    ## basehaz-coef5      -3.530  1.004     NA     
+    ## basehaz-coef6      -2.380  1.392     NA     
     ## 
     ## Group-level random effects:
     ##  Groups  Name              Std.Dev. Corr
-    ##  patient Long1|(Intercept) 0.76071      
-    ##          Long1|obstime     0.03661  0.03
+    ##  patient Long1|(Intercept) 0.76272      
+    ##          Long1|obstime     0.03671  0.02
     ## Num. levels: patient 467
 
 Let's see how closely the estimated 'bs' baseline hazard matches our observed KM curves.
@@ -454,7 +458,7 @@ Let's see how closely the estimated 'bs' baseline hazard matches our observed KM
 #### Summarize parameter estimates graphically
 
 ``` r
-bayesplot::mcmc_areas(as.array(f7), regex_pars = '^Long1\\|[^(Intercept)|sigma]') + 
+bayesplot::mcmc_areas(as.array(f7), pars = paste('Long1', colnames(coefficients(long3)$patient)[-1], sep = '|')) + 
   bayesplot::vline_0() +
   ggtitle('Posterior parameter estimates for model fit with stan_jm', subtitle = 'f7: longitudinal submodel for assoc with sqrt(CD4) over time (obstime)')
 ```
@@ -462,6 +466,45 @@ bayesplot::mcmc_areas(as.array(f7), regex_pars = '^Long1\\|[^(Intercept)|sigma]'
 ![](summarize_aids_fit_files/figure-markdown_github/show-coefs-long-1.png)
 
 Here we see increased *hazard* (worse survival) with prior opportunistic infections, prior AZT failure, and treatment with `ddI` (didanosine).
+
+For example, the typical trajectory for a patient varies according to `prevOI` and `obstime`, with very little variation due to treatment.
+
+``` r
+newdata <- purrr::cross_d(list(prevOI = c('AIDS', 'noAIDS'),
+                       obstime = aids2 %>% dplyr::distinct(obstime) %>% unlist(),
+                       drug = c('ddI', 'ddC')
+                       )) 
+
+newdata.id <- newdata %>%
+  dplyr::distinct(prevOI, drug) %>%
+  dplyr::mutate(patient = 2000 + row_number()) %>%
+  dplyr::mutate(gender = 'male',
+                AZT = 'failure')
+
+newdata <- newdata %>%
+  dplyr::inner_join(newdata.id, by = c('prevOI', 'drug'))
+
+pplong <- posterior_predict(
+  f7,
+  m = 1,
+  newdata = newdata
+)
+pplong_df <- newdata %>%
+  dplyr::bind_cols(as.data.frame(posterior_interval(pplong))) %>%
+  dplyr::bind_cols(as.data.frame(posterior_interval(pplong, prob = 0.01))) %>%
+  dplyr::mutate(median = (`49.5%` + `50.5%`)/2)
+
+ggplot(pplong_df, aes(x = obstime, y = median, colour = drug, group = drug)) +
+  geom_line() +
+  facet_wrap(~prevOI) +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`, colour = NULL, fill = drug), alpha = 0.2) +
+  theme_minimal() +
+  ggtitle('Posterior predicted values for prevOI X drug interaction') +
+  scale_x_continuous('Months') +
+  scale_y_continuous('sqrt(CD4)')
+```
+
+![](summarize_aids_fit_files/figure-markdown_github/unnamed-chunk-1-1.png)
 
 There is better overall survival among men than women, but there isn't a lot of confidence in this signal.
 
@@ -496,7 +539,7 @@ There is also a weak but plausible trend towards improved survival with increasi
 Next we compare coefficient values from the longitudinal model fit to their counterparts in the `stan_jm` fit.
 
 ``` r
-p_joint <- bayesplot::mcmc_areas(as.array(f7), regex_pars = '^Long1\\|[^(Intercept)|sigma]') + 
+p_joint <- bayesplot::mcmc_areas(as.array(f7), pars = paste('Long1', colnames(coefficients(long3)$patient)[-1], sep = '|')) + 
   bayesplot::vline_0() +
   ggtitle('Fit within Joint Model')
 
@@ -516,14 +559,62 @@ bayesplot::bayesplot_grid(p_joint, p_long,
 
 ![](summarize_aids_fit_files/figure-markdown_github/compare-coefs-long-1.png)
 
+### Summarizing model for example patients
+
+At the population level, how is the outcome different among patients with an AIDS diagnosis, depending on treatment?
+
+Here we will consider only data known at baseline, then draw from the posterior predictive distribution under two treatment scenarios.
+
+``` r
+with_aids <- aids2 %>% 
+  dplyr::filter(obstime == min(obstime)) %>%
+  dplyr::filter(prevOI == 'AIDS')
+
+with_aids_ddI <- with_aids %>%
+  dplyr::filter(drug == 'ddI')
+with_aids_ddI.id <- aids.id %>%
+  dplyr::semi_join(with_aids_ddI, by='patient')
+
+with_aids_ddC <- with_aids %>%
+  dplyr::filter(drug == 'ddI')
+with_aids_ddC.id <- aids.id %>%
+  dplyr::semi_join(with_aids_ddC, by='patient')
+
+with_aids_ddI_ppsurv <- with_filecache(
+  rstanarm::posterior_survfit(
+    f7,
+    newdataLong = with_aids_ddI,
+    newdataEvent = with_aids_ddI.id,
+    standardise = TRUE,
+    times = 0,
+    extrapolate = TRUE,
+    control = list(condition = FALSE)
+  ), filename = 'f7.posterior_survfit.with_aids_ddI.rds')
+
+with_aids_ddC_ppsurv <- with_filecache(
+  rstanarm::posterior_survfit(
+    f7,
+    newdataLong = with_aids_ddC,
+    newdataEvent = with_aids_ddC.id,
+    standardise = TRUE,
+    times = 0,
+    extrapolate = TRUE,
+    control = list(condition = FALSE)
+  ), filename = 'f7.posterior_survfit.with_aids_ddC.rds')
+```
+
 The decision problem
 --------------------
 
 Now we get to the crux of the issue - namely, informing the treatment plan for an individual patient.
 
-Given the model, you might think that we could simply trat all patients with `ddC`, since `ddI` is associated with higher hazard for mortality.
+Given the model, you might think that we could simply treat all patients with `ddC`, since `ddI` is associated with higher hazard for mortality.
 
 However, the picture may not be that simple.
+
+First, the model is not simple. We have an interaction effect between treatment status & prevOI, but we also have slightly higher `CD4` counts with `ddI` (which is associated with improved survival) and slightly higher hazard with `ddI` (which is thus associated with worse survival). Our model also measures the drug effect *holding all other covariates equal* .. including `CD4` count. But `CD4` count as we have seen often varies over time and differently for different patients.
+
+Second, even if our model *were* simple, the decision problem is itself complex.
 
 Consider:
 
@@ -539,6 +630,508 @@ Consider:
 
 In practice, we want to consider all of these factors when making a treatment decision.
 
+### Example for one patient
+
+For lack of a better name, we will call this first problem 'heterogenous treatment effects'. We will call the second problem the 'decision problem'.
+
+#### Plot expected survival over time
+
+To start with a simple example, let's consider the case for a single patient.
+
+``` r
+patient_ids <- aids.id %>% 
+  dplyr::group_by(prevOI) %>%
+  dplyr::distinct(patient) %>% 
+  dplyr::sample_n(3) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-prevOI)
+
+# get data for this patient at baseline
+patient_data <- aids2 %>%
+  dplyr::semi_join(patient_ids, by='patient') %>%
+  dplyr::filter(obstime == min(obstime))
+
+patient_data.id <- aids.id %>%
+  dplyr::semi_join(patient_ids, by='patient')
+
+# create fictional records with alternate treatment 
+patient_data_alt <- patient_data %>% 
+                     dplyr::mutate(drug = ifelse(drug == 'ddI', 'ddC', 'ddI'))
+patient_data_alt.id <- patient_data.id %>% 
+                     dplyr::mutate(drug = ifelse(drug == 'ddI', 'ddC', 'ddI'))
+
+# posterior-predicted survival for observed scenario
+patient_ppsurv <- with_filecache(
+  rstanarm::posterior_survfit(
+    f7,
+    newdataLong = patient_data,
+    newdataEvent = patient_data.id,
+    standardise = FALSE,
+    times = 0,
+    extrapolate = TRUE,
+    control = list(condition = FALSE)
+  ), filename = paste0('f7.posterior_survfit2.treated_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
+
+# posterior-predicted survival for alternate scenario
+patient_ppsurv_alt <- with_filecache(
+  rstanarm::posterior_survfit(
+    f7,
+    newdataLong = patient_data_alt,
+    newdataEvent = patient_data_alt.id,
+    standardise = FALSE,
+    times = 0,
+    extrapolate = TRUE,
+    control = list(condition = FALSE)
+  ), filename = paste0('f7.posterior_survfit2.alt_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
+
+# prepare posterior predictive densities of survival
+surv_density <- attr(patient_ppsurv, 'surv')
+surv_density_alt <- attr(patient_ppsurv_alt, 'surv')
+surv_density_data <- list()
+surv_density_data_alt <- list()
+surv_density_times <- dplyr::distinct(patient_ppsurv, obstime) %>% unlist()
+for (t in seq_len(length(surv_density))) {
+  surv_time <- surv_density_times[[t]]
+  surv_density_data[[t]] <- tbl_df(surv_density[[t]]) %>%
+    dplyr::mutate(iter = row_number()) %>%
+    tidyr::gather(patient, prop_survival, -iter) %>%
+    dplyr::mutate(obstime = surv_time) %>%
+    dplyr::left_join(patient_data.id %>% dplyr::select(-obstime),
+                     by = 'patient')
+  surv_density_data_alt[[t]] <- tbl_df(surv_density_alt[[t]]) %>%
+    dplyr::mutate(iter = row_number()) %>%
+    tidyr::gather(patient, prop_survival, -iter) %>%
+    dplyr::mutate(obstime = surv_time) %>%
+    dplyr::left_join(patient_data_alt.id %>% dplyr::select(-obstime),
+                     by = 'patient')
+}
+```
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+``` r
+surv_density_df <- dplyr::bind_rows(surv_density_data) %>% 
+  dplyr::bind_rows(dplyr::bind_rows(surv_density_data_alt)) %>%
+  dplyr::group_by(iter, patient, drug) %>%
+  dplyr::mutate(prev_prop_survival = lag(prop_survival, order_by=desc(obstime), n=1, default = 0)) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(one = 1) %>%
+  dplyr::full_join(tbl_df(list(prob = seq(from = 0, to = 1, by = 0.01), one = 1)), by = 'one') %>%
+  dplyr::filter(prob >= prev_prop_survival & prob <= prop_survival) %>%
+  dplyr::arrange(patient, drug, iter, prob)
+```
+
+    ## Warning in bind_rows_(x, .id): binding factor and character vector,
+    ## coercing into character vector
+
+``` r
+# plot expected survival probabilities under two scenarios
+patient_ppsurv %>%
+  dplyr::left_join(patient_data.id %>% dplyr::select(-obstime), by = 'patient') %>%
+  dplyr::bind_rows(patient_ppsurv_alt %>%
+                     dplyr::left_join(patient_data_alt.id %>% dplyr::select(-obstime), by = 'patient')
+                   ) %>%
+  dplyr::arrange(prevOI, patient) %>%
+  ggplot(., aes(x = obstime, y = survpred, group = drug, colour = drug)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = ci_lb, ymax = ci_ub, fill = drug, colour = NULL), alpha = 0.4) +
+  facet_wrap(prevOI~patient) +
+  theme_minimal() +
+  scale_x_continuous('Months following treatment') +
+  scale_y_continuous('Survival probability', labels = percent)
+```
+
+    ## Warning in bind_rows_(x, .id): binding factor and character vector,
+    ## coercing into character vector
+
+![](summarize_aids_fit_files/figure-markdown_github/example-patients-baseline-plot-predcurve-1.png)
+
+``` r
+surv_density_df %>%
+  dplyr::arrange(prevOI, patient) %>%
+ggplot(., aes(x = obstime, group = drug, colour = drug)) + 
+  geom_density() +
+  theme_minimal() +
+  facet_wrap(prevOI~patient) +
+  scale_x_continuous('Posterior predicted survival (months)')
+```
+
+![](summarize_aids_fit_files/figure-markdown_github/example-patients-baseline-plot-predsurv-1.png)
+
+#### plot expected CD4 counts over time
+
+``` r
+# prepare predicted cd4 counts under each scenario
+patient_ppdata <- with_filecache(
+  rstanarm::posterior_predict(
+    f7,
+    m = 1,
+    newdata = patient_data %>% 
+      dplyr::select(-obstime) %>%
+      mutate(one = 1) %>%
+      dplyr::full_join(tbl_df(list(obstime = surv_density_times)) %>% dplyr::mutate(one = 1),
+                       by='one') %>% 
+      dplyr::arrange(patient, obstime)
+  ), filename = paste0('f7.posterior_predict2.treated_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
+
+# posterior-predicted survival for alternate scenario
+patient_ppdata_alt <- with_filecache(
+  rstanarm::posterior_predict(
+    f7,
+    m = 1,
+    newdata = patient_data_alt %>%
+      dplyr::select(-obstime) %>%
+      mutate(one = 1) %>%
+      dplyr::full_join(tbl_df(list(obstime = surv_density_times)) %>% dplyr::mutate(one = 1),
+                       by='one') %>% 
+      dplyr::arrange(patient, obstime)
+  ), filename = paste0('f7.posterior_predict2.alt_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
+
+
+patient_ppint_alt <- patient_data_alt %>% 
+  dplyr::select(-obstime) %>%
+  dplyr::mutate(one = 1) %>%
+  dplyr::full_join(tbl_df(list(obstime = surv_density_times, one = 1)), by = 'one') %>%
+  dplyr::arrange(patient, obstime) %>%
+  dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata_alt))) %>%
+  dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata_alt, prob = 0.01))) %>%
+  dplyr::mutate(median = (`50.5%` + `49.5%`)/2)
+
+patient_ppint <- patient_data %>%
+  dplyr::select(-obstime) %>%
+  dplyr::mutate(one = 1) %>%
+  dplyr::full_join(tbl_df(list(obstime = surv_density_times, one = 1)), by = 'one') %>%
+  dplyr::arrange(patient, obstime) %>%
+  dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata))) %>%
+  dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata_alt, prob = 0.01))) %>%
+  dplyr::mutate(median = (`50.5%` + `49.5%`)/2)
+```
+
+``` r
+# plot expected `CD4` counts under two scenarios
+patient_ppint %>% 
+  dplyr::bind_rows(patient_ppint_alt) %>%
+  ggplot(., aes(x = obstime, y = median, group = drug, colour = drug)) + 
+  geom_line() +
+  facet_wrap(prevOI ~ patient) +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`, colour = NULL, fill = drug), alpha = 0.2)
+```
+
+    ## Warning in bind_rows_(x, .id): binding factor and character vector,
+    ## coercing into character vector
+
+![](summarize_aids_fit_files/figure-markdown_github/unnamed-chunk-4-1.png)
+
 ### Is the benefit of `ddC` over `ddI` the same for all patients?
 
-### Example for one patient
+Look at model `f8`
+------------------
+
+``` r
+f8 <- readRDS(file.path(CACHE_DIR, 'f8.rds'))
+print(f8)
+```
+
+    ## stan_jm(formulaLong = sqrt_cd4 ~ obstime + drug + obstime:drug + 
+    ##     gender + prevOI + AZT + (1 + obstime | patient), dataLong = aids2, 
+    ##     formulaEvent = Surv(Time, death) ~ drug + prevOI + drug:prevOI + 
+    ##         gender + AZT + CD4, dataEvent = aids.id, time_var = "obstime", 
+    ##     assoc = c("etavalue", "etaslope"), basehaz = "bs", chains = 4, 
+    ##     adapt_delta = 0.999)
+    ## 
+    ## Longitudinal submodel: sqrt_cd4
+    ##                 Median MAD_SD
+    ## (Intercept)      3.085  0.133
+    ## obstime         -0.042  0.005
+    ## drugddI          0.065  0.076
+    ## gendermale      -0.002  0.121
+    ## prevOIAIDS      -0.871  0.096
+    ## AZTfailure      -0.078  0.093
+    ## obstime:drugddI  0.005  0.007
+    ## sigma            0.370  0.011
+    ## 
+    ## Event submodel:
+    ##                    Median MAD_SD exp(Median)
+    ## drugddI             1.137  0.424  3.116     
+    ## prevOIAIDS          1.266  0.379  3.546     
+    ## gendermale         -0.354  0.278  0.702     
+    ## AZTfailure          0.139  0.174  1.149     
+    ## CD4                -0.001  0.064  0.999     
+    ## drugddI:prevOIAIDS -0.915  0.439  0.401     
+    ## Long1|etavalue     -0.958  0.344  0.384     
+    ## Long1|etaslope     -4.069  8.097  0.017     
+    ## basehaz-coef1      -4.514  1.072     NA     
+    ## basehaz-coef2      -1.924  0.974     NA     
+    ## basehaz-coef3      -3.653  0.925     NA     
+    ## basehaz-coef4      -1.414  0.923     NA     
+    ## basehaz-coef5      -3.513  1.070     NA     
+    ## basehaz-coef6      -2.267  1.388     NA     
+    ## 
+    ## Group-level random effects:
+    ##  Groups  Name              Std.Dev. Corr
+    ##  patient Long1|(Intercept) 0.76535      
+    ##          Long1|obstime     0.03679  0.02
+    ## Num. levels: patient 467
+
+``` r
+# posterior-predicted survival for observed scenario
+patient_ppsurv8 <- with_filecache(
+  rstanarm::posterior_survfit(
+    f8,
+    newdataLong = patient_data,
+    newdataEvent = patient_data.id,
+    standardise = FALSE,
+    times = 0,
+    extrapolate = TRUE,
+    control = list(condition = FALSE)
+  ), filename = paste0('f8.posterior_survfit2.treated_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
+
+# posterior-predicted survival for alternate scenario
+patient_ppsurv_alt8 <- with_filecache(
+  rstanarm::posterior_survfit(
+    f8,
+    newdataLong = patient_data_alt,
+    newdataEvent = patient_data_alt.id,
+    standardise = FALSE,
+    times = 0,
+    extrapolate = TRUE,
+    control = list(condition = FALSE)
+  ), filename = paste0('f8.posterior_survfit2.alt_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
+
+# prepare posterior predictive densities of survival
+surv_density <- attr(patient_ppsurv, 'surv')
+surv_density_alt <- attr(patient_ppsurv_alt, 'surv')
+surv_density_data <- list()
+surv_density_data_alt <- list()
+surv_density_times <- dplyr::distinct(patient_ppsurv, obstime) %>% unlist()
+for (t in seq_len(length(surv_density))) {
+  surv_time <- surv_density_times[[t]]
+  surv_density_data[[t]] <- tbl_df(surv_density[[t]]) %>%
+    dplyr::mutate(iter = row_number()) %>%
+    tidyr::gather(patient, prop_survival, -iter) %>%
+    dplyr::mutate(obstime = surv_time) %>%
+    dplyr::left_join(patient_data.id %>% dplyr::select(-obstime),
+                     by = 'patient')
+  surv_density_data_alt[[t]] <- tbl_df(surv_density_alt[[t]]) %>%
+    dplyr::mutate(iter = row_number()) %>%
+    tidyr::gather(patient, prop_survival, -iter) %>%
+    dplyr::mutate(obstime = surv_time) %>%
+    dplyr::left_join(patient_data_alt.id %>% dplyr::select(-obstime),
+                     by = 'patient')
+}
+```
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
+    ## factor and character vector, coercing into character vector
+
+``` r
+surv_density_df8 <- dplyr::bind_rows(surv_density_data) %>% 
+  dplyr::bind_rows(dplyr::bind_rows(surv_density_data_alt)) %>%
+  dplyr::group_by(iter, patient, drug) %>%
+  dplyr::mutate(prev_prop_survival = lag(prop_survival, order_by=desc(obstime), n=1, default = 0)) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(one = 1) %>%
+  dplyr::full_join(tbl_df(list(prob = seq(from = 0, to = 1, by = 0.01), one = 1)), by = 'one') %>%
+  dplyr::filter(prob >= prev_prop_survival & prob <= prop_survival) %>%
+  dplyr::arrange(patient, drug, iter, prob)
+```
+
+    ## Warning in bind_rows_(x, .id): binding factor and character vector,
+    ## coercing into character vector
+
+``` r
+# plot expected survival probabilities under two scenarios
+patient_ppsurv8 %>%
+  dplyr::left_join(patient_data.id %>% dplyr::select(-obstime), by = 'patient') %>%
+  dplyr::bind_rows(patient_ppsurv_alt8 %>%
+                     dplyr::left_join(patient_data_alt.id %>% dplyr::select(-obstime), by = 'patient')
+                   ) %>%
+  dplyr::arrange(prevOI, patient) %>%
+  ggplot(., aes(x = obstime, y = survpred, group = drug, colour = drug)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = ci_lb, ymax = ci_ub, fill = drug, colour = NULL), alpha = 0.4) +
+  facet_wrap(prevOI~patient) +
+  theme_minimal() +
+  scale_x_continuous('Months following treatment') +
+  scale_y_continuous('Survival probability', labels = percent)
+```
+
+    ## Warning in bind_rows_(x, .id): binding factor and character vector,
+    ## coercing into character vector
+
+![](summarize_aids_fit_files/figure-markdown_github/example-patients-baseline-plot-predcurve-f8-1.png)
