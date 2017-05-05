@@ -289,7 +289,7 @@ ggplot(aids2 %>%
          tidyr::gather('variable', 'value', CD4, `sqrt(CD4)`),
        aes(x = value, group = variable, colour = variable)) + 
   geom_density() +
-  facet_wrap(~variable, scale = 'free') +
+  facet_wrap(~variable, scales = 'free') +
   theme_minimal() +
   theme(legend.position = 'none')
 ```
@@ -565,44 +565,6 @@ At the population level, how is the outcome different among patients with an AID
 
 Here we will consider only data known at baseline, then draw from the posterior predictive distribution under two treatment scenarios.
 
-``` r
-with_aids <- aids2 %>% 
-  dplyr::filter(obstime == min(obstime)) %>%
-  dplyr::filter(prevOI == 'AIDS')
-
-with_aids_ddI <- with_aids %>%
-  dplyr::filter(drug == 'ddI')
-with_aids_ddI.id <- aids.id %>%
-  dplyr::semi_join(with_aids_ddI, by='patient')
-
-with_aids_ddC <- with_aids %>%
-  dplyr::filter(drug == 'ddI')
-with_aids_ddC.id <- aids.id %>%
-  dplyr::semi_join(with_aids_ddC, by='patient')
-
-with_aids_ddI_ppsurv <- with_filecache(
-  rstanarm::posterior_survfit(
-    f7,
-    newdataLong = with_aids_ddI,
-    newdataEvent = with_aids_ddI.id,
-    standardise = TRUE,
-    times = 0,
-    extrapolate = TRUE,
-    control = list(condition = FALSE)
-  ), filename = 'f7.posterior_survfit.with_aids_ddI.rds')
-
-with_aids_ddC_ppsurv <- with_filecache(
-  rstanarm::posterior_survfit(
-    f7,
-    newdataLong = with_aids_ddC,
-    newdataEvent = with_aids_ddC.id,
-    standardise = TRUE,
-    times = 0,
-    extrapolate = TRUE,
-    control = list(condition = FALSE)
-  ), filename = 'f7.posterior_survfit.with_aids_ddC.rds')
-```
-
 The decision problem
 --------------------
 
@@ -630,187 +592,13 @@ Consider:
 
 In practice, we want to consider all of these factors when making a treatment decision.
 
-### Example for one patient
+### Example - estimating treatment effects
 
 For lack of a better name, we will call this first problem 'heterogenous treatment effects'. We will call the second problem the 'decision problem'.
 
 #### Plot expected survival over time
 
-To start with a simple example, let's consider the case for a single patient.
-
-``` r
-patient_ids <- aids.id %>% 
-  dplyr::group_by(prevOI) %>%
-  dplyr::distinct(patient) %>% 
-  dplyr::sample_n(3) %>%
-  dplyr::ungroup() %>%
-  dplyr::select(-prevOI)
-
-# get data for this patient at baseline
-patient_data <- aids2 %>%
-  dplyr::semi_join(patient_ids, by='patient') %>%
-  dplyr::filter(obstime == min(obstime))
-
-patient_data.id <- aids.id %>%
-  dplyr::semi_join(patient_ids, by='patient')
-
-# create fictional records with alternate treatment 
-patient_data_alt <- patient_data %>% 
-                     dplyr::mutate(drug = ifelse(drug == 'ddI', 'ddC', 'ddI'))
-patient_data_alt.id <- patient_data.id %>% 
-                     dplyr::mutate(drug = ifelse(drug == 'ddI', 'ddC', 'ddI'))
-
-# posterior-predicted survival for observed scenario
-patient_ppsurv <- with_filecache(
-  rstanarm::posterior_survfit(
-    f7,
-    newdataLong = patient_data,
-    newdataEvent = patient_data.id,
-    standardise = FALSE,
-    times = 0,
-    extrapolate = TRUE,
-    control = list(condition = FALSE)
-  ), filename = paste0('f7.posterior_survfit2.treated_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
-
-# posterior-predicted survival for alternate scenario
-patient_ppsurv_alt <- with_filecache(
-  rstanarm::posterior_survfit(
-    f7,
-    newdataLong = patient_data_alt,
-    newdataEvent = patient_data_alt.id,
-    standardise = FALSE,
-    times = 0,
-    extrapolate = TRUE,
-    control = list(condition = FALSE)
-  ), filename = paste0('f7.posterior_survfit2.alt_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
-
-# prepare posterior predictive densities of survival
-surv_density <- attr(patient_ppsurv, 'surv')
-surv_density_alt <- attr(patient_ppsurv_alt, 'surv')
-surv_density_data <- list()
-surv_density_data_alt <- list()
-surv_density_times <- dplyr::distinct(patient_ppsurv, obstime) %>% unlist()
-for (t in seq_len(length(surv_density))) {
-  surv_time <- surv_density_times[[t]]
-  surv_density_data[[t]] <- tbl_df(surv_density[[t]]) %>%
-    dplyr::mutate(iter = row_number()) %>%
-    tidyr::gather(patient, prop_survival, -iter) %>%
-    dplyr::mutate(obstime = surv_time) %>%
-    dplyr::left_join(patient_data.id %>% dplyr::select(-obstime),
-                     by = 'patient')
-  surv_density_data_alt[[t]] <- tbl_df(surv_density_alt[[t]]) %>%
-    dplyr::mutate(iter = row_number()) %>%
-    tidyr::gather(patient, prop_survival, -iter) %>%
-    dplyr::mutate(obstime = surv_time) %>%
-    dplyr::left_join(patient_data_alt.id %>% dplyr::select(-obstime),
-                     by = 'patient')
-}
-```
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-``` r
-surv_density_df <- dplyr::bind_rows(surv_density_data) %>% 
-  dplyr::bind_rows(dplyr::bind_rows(surv_density_data_alt)) %>%
-  dplyr::group_by(iter, patient, drug) %>%
-  dplyr::mutate(prev_prop_survival = lag(prop_survival, order_by=desc(obstime), n=1, default = 0)) %>%
-  dplyr::ungroup() %>%
-  dplyr::mutate(one = 1) %>%
-  dplyr::full_join(tbl_df(list(prob = seq(from = 0, to = 1, by = 0.01), one = 1)), by = 'one') %>%
-  dplyr::filter(prob >= prev_prop_survival & prob <= prop_survival) %>%
-  dplyr::arrange(patient, drug, iter, prob)
-```
-
-    ## Warning in bind_rows_(x, .id): binding factor and character vector,
-    ## coercing into character vector
+To start with a simple example, let's consider the case for a few patients.
 
 ``` r
 # plot expected survival probabilities under two scenarios
@@ -840,60 +628,13 @@ surv_density_df %>%
 ggplot(., aes(x = obstime, group = drug, colour = drug)) + 
   geom_density() +
   theme_minimal() +
-  facet_wrap(prevOI~patient) +
+  facet_wrap(prevOI~patient, scales = 'free') +
   scale_x_continuous('Posterior predicted survival (months)')
 ```
 
 ![](summarize_aids_fit_files/figure-markdown_github/example-patients-baseline-plot-predsurv-1.png)
 
-#### plot expected CD4 counts over time
-
-``` r
-# prepare predicted cd4 counts under each scenario
-patient_ppdata <- with_filecache(
-  rstanarm::posterior_predict(
-    f7,
-    m = 1,
-    newdata = patient_data %>% 
-      dplyr::select(-obstime) %>%
-      mutate(one = 1) %>%
-      dplyr::full_join(tbl_df(list(obstime = surv_density_times)) %>% dplyr::mutate(one = 1),
-                       by='one') %>% 
-      dplyr::arrange(patient, obstime)
-  ), filename = paste0('f7.posterior_predict2.treated_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
-
-# posterior-predicted survival for alternate scenario
-patient_ppdata_alt <- with_filecache(
-  rstanarm::posterior_predict(
-    f7,
-    m = 1,
-    newdata = patient_data_alt %>%
-      dplyr::select(-obstime) %>%
-      mutate(one = 1) %>%
-      dplyr::full_join(tbl_df(list(obstime = surv_density_times)) %>% dplyr::mutate(one = 1),
-                       by='one') %>% 
-      dplyr::arrange(patient, obstime)
-  ), filename = paste0('f7.posterior_predict2.alt_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
-
-
-patient_ppint_alt <- patient_data_alt %>% 
-  dplyr::select(-obstime) %>%
-  dplyr::mutate(one = 1) %>%
-  dplyr::full_join(tbl_df(list(obstime = surv_density_times, one = 1)), by = 'one') %>%
-  dplyr::arrange(patient, obstime) %>%
-  dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata_alt))) %>%
-  dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata_alt, prob = 0.01))) %>%
-  dplyr::mutate(median = (`50.5%` + `49.5%`)/2)
-
-patient_ppint <- patient_data %>%
-  dplyr::select(-obstime) %>%
-  dplyr::mutate(one = 1) %>%
-  dplyr::full_join(tbl_df(list(obstime = surv_density_times, one = 1)), by = 'one') %>%
-  dplyr::arrange(patient, obstime) %>%
-  dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata))) %>%
-  dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata_alt, prob = 0.01))) %>%
-  dplyr::mutate(median = (`50.5%` + `49.5%`)/2)
-```
+#### Plot expected CD4 counts over time
 
 ``` r
 # plot expected `CD4` counts under two scenarios
@@ -914,6 +655,8 @@ patient_ppint %>%
 
 Look at model `f8`
 ------------------
+
+As a comparison, look at model `f8` which includes CD4 count at baseline as a covariate in the survival submodel.
 
 ``` r
 f8 <- readRDS(file.path(CACHE_DIR, 'f8.rds'))
@@ -962,159 +705,6 @@ print(f8)
     ## Num. levels: patient 467
 
 ``` r
-# posterior-predicted survival for observed scenario
-patient_ppsurv8 <- with_filecache(
-  rstanarm::posterior_survfit(
-    f8,
-    newdataLong = patient_data,
-    newdataEvent = patient_data.id,
-    standardise = FALSE,
-    times = 0,
-    extrapolate = TRUE,
-    control = list(condition = FALSE)
-  ), filename = paste0('f8.posterior_survfit2.treated_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
-
-# posterior-predicted survival for alternate scenario
-patient_ppsurv_alt8 <- with_filecache(
-  rstanarm::posterior_survfit(
-    f8,
-    newdataLong = patient_data_alt,
-    newdataEvent = patient_data_alt.id,
-    standardise = FALSE,
-    times = 0,
-    extrapolate = TRUE,
-    control = list(condition = FALSE)
-  ), filename = paste0('f8.posterior_survfit2.alt_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
-
-# prepare posterior predictive densities of survival
-surv_density <- attr(patient_ppsurv, 'surv')
-surv_density_alt <- attr(patient_ppsurv_alt, 'surv')
-surv_density_data <- list()
-surv_density_data_alt <- list()
-surv_density_times <- dplyr::distinct(patient_ppsurv, obstime) %>% unlist()
-for (t in seq_len(length(surv_density))) {
-  surv_time <- surv_density_times[[t]]
-  surv_density_data[[t]] <- tbl_df(surv_density[[t]]) %>%
-    dplyr::mutate(iter = row_number()) %>%
-    tidyr::gather(patient, prop_survival, -iter) %>%
-    dplyr::mutate(obstime = surv_time) %>%
-    dplyr::left_join(patient_data.id %>% dplyr::select(-obstime),
-                     by = 'patient')
-  surv_density_data_alt[[t]] <- tbl_df(surv_density_alt[[t]]) %>%
-    dplyr::mutate(iter = row_number()) %>%
-    tidyr::gather(patient, prop_survival, -iter) %>%
-    dplyr::mutate(obstime = surv_time) %>%
-    dplyr::left_join(patient_data_alt.id %>% dplyr::select(-obstime),
-                     by = 'patient')
-}
-```
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-    ## Warning in left_join_impl(x, y, by$x, by$y, suffix$x, suffix$y): joining
-    ## factor and character vector, coercing into character vector
-
-``` r
-surv_density_df8 <- dplyr::bind_rows(surv_density_data) %>% 
-  dplyr::bind_rows(dplyr::bind_rows(surv_density_data_alt)) %>%
-  dplyr::group_by(iter, patient, drug) %>%
-  dplyr::mutate(prev_prop_survival = lag(prop_survival, order_by=desc(obstime), n=1, default = 0)) %>%
-  dplyr::ungroup() %>%
-  dplyr::mutate(one = 1) %>%
-  dplyr::full_join(tbl_df(list(prob = seq(from = 0, to = 1, by = 0.01), one = 1)), by = 'one') %>%
-  dplyr::filter(prob >= prev_prop_survival & prob <= prop_survival) %>%
-  dplyr::arrange(patient, drug, iter, prob)
-```
-
-    ## Warning in bind_rows_(x, .id): binding factor and character vector,
-    ## coercing into character vector
-
-``` r
 # plot expected survival probabilities under two scenarios
 patient_ppsurv8 %>%
   dplyr::left_join(patient_data.id %>% dplyr::select(-obstime), by = 'patient') %>%
@@ -1135,3 +725,15 @@ patient_ppsurv8 %>%
     ## coercing into character vector
 
 ![](summarize_aids_fit_files/figure-markdown_github/example-patients-baseline-plot-predcurve-f8-1.png)
+
+``` r
+surv_density_df8 %>%
+  dplyr::arrange(prevOI, patient) %>%
+ggplot(., aes(x = obstime, group = drug, colour = drug)) + 
+  geom_density() +
+  theme_minimal() +
+  facet_wrap(prevOI~patient, scales = 'free') +
+  scale_x_continuous('Posterior predicted survival (months)')
+```
+
+![](summarize_aids_fit_files/figure-markdown_github/unnamed-chunk-7-1.png)

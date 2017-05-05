@@ -109,6 +109,17 @@ f8 <- with_filecache(stan_jm(formulaLong = sqrt_cd4 ~ obstime + drug + obstime:d
                              adapt_delta = 0.999
 ), filename = 'f8.rds')
 
+f9 <- with_filecache(stan_jm(formulaLong = sqrt_cd4 ~ obstime + drug + obstime:drug + gender + prevOI + AZT + (1 + obstime | patient),
+                             dataLong = aids2,
+                             time_var = 'obstime',
+                             formulaEvent = Surv(Time, death) ~ drug + prevOI + drug:prevOI + gender + AZT + CD4:drug,
+                             dataEvent = aids.id,
+                             chains = 4,
+                             assoc = c("etavalue", "etaslope"),
+                             basehaz = 'bs',
+                             adapt_delta = 0.999
+), filename = 'f9.rds')
+
 f0.loo <- with_filecache(loo(f0),
                          filename = 'f0.loo.rds')
 f1.loo <- with_filecache(loo(f1),
@@ -123,8 +134,10 @@ f7.loo <- with_filecache(loo(f7),
                          filename = 'f7.loo.rds')
 f8.loo <- with_filecache(loo(f8),
                          filename = 'f8.loo.rds')
+f9.loo <- with_filecache(loo(f8),
+                         filename = 'f9.loo.rds')
 
-loo_comp <- loo::compare(f0.loo, f1.loo, f2.loo, f3.loo, f4.loo, f7.loo, f8.loo)
+loo_comp <- loo::compare(f0.loo, f1.loo, f2.loo, f3.loo, f4.loo, f7.loo, f8.loo, f9.loo)
 
 f7.ps_check <- with_filecache(rstanarm::ps_check(f7),
                               filename = 'f7.ps_check.rds')

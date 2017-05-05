@@ -37,7 +37,7 @@ with_aids_ddI.id <- aids.id %>%
   dplyr::semi_join(with_aids_ddI, by='patient')
 
 with_aids_ddC <- with_aids %>%
-  dplyr::filter(drug == 'ddI')
+  dplyr::filter(drug == 'ddC')
 with_aids_ddC.id <- aids.id %>%
   dplyr::semi_join(with_aids_ddC, by='patient')
 
@@ -53,7 +53,7 @@ no_aids_ddI.id <- aids.id %>%
   dplyr::semi_join(no_aids_ddI, by='patient')
 
 no_aids_ddC <- no_aids %>%
-  dplyr::filter(drug == 'ddI')
+  dplyr::filter(drug == 'ddC')
 no_aids_ddC.id <- aids.id %>%
   dplyr::semi_join(no_aids_ddC, by='patient')
 
