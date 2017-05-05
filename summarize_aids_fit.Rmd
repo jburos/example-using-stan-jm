@@ -2,9 +2,7 @@
 title: "Summarize drug comparison"
 author: "Jacki Novik"
 date: "5/4/2017"
-output: 
-  - github_document
-  - html_document
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -17,7 +15,7 @@ library(dplyr)
 library(scales)
 library(bayesplot)
 source('analyze_aids_data.longitudinal.without_kfold.R')
-#source('analyze_aids_data.survival.R')
+# source('analyze_aids_data.survival.R')
 ```
 
 ## Data summary
@@ -53,7 +51,7 @@ aids.id %>%
              #surv.median.line='v',
              conf.int = TRUE,
              size = 0.5, 
-             xlab = 'days',
+             xlab = 'months',
              data = aids.id) +
   ggtitle('Survival among all patients') +
   scale_y_continuous(labels = percent)
@@ -73,7 +71,7 @@ plot_noaids <- aids.id %>%
              #surv.median.line='v',
              conf.int = TRUE,
              size = 0.5, 
-             xlab = 'days',
+             xlab = 'months',
              data = aids.id %>%
                dplyr::filter(prevOI == 'noAIDS')) +
   ggtitle('Patients without previous infections (no AIDs)') +
@@ -93,7 +91,7 @@ plot_aids <- aids.id %>%
              surv.median.line='v',
              conf.int = TRUE,
              size = 0.5, 
-             xlab = 'days',
+             xlab = 'months',
              data = aids.id %>%
                dplyr::filter(prevOI == 'AIDS')) +
   ggtitle('Patients with previous opportunistic infections (AIDs)') +
@@ -112,7 +110,7 @@ plot_by_azt <- aids.id %>%
              surv.median.line='v',
              conf.int = TRUE,
              size = 0.5, 
-             xlab = 'days',
+             xlab = 'months',
              data = aids.id
              ) +
   ggtitle('Among all patients') +
@@ -131,7 +129,7 @@ plot_by_gender <- aids.id %>%
              surv.median.line='v',
              conf.int = TRUE,
              size = 0.5, 
-             xlab = 'days',
+             xlab = 'months',
              data = aids.id
              ) +
   ggtitle('Among all patients') +
@@ -193,7 +191,7 @@ Here we plot trajectories of CD4 count over the course of treatment for each pat
 ```{r plot-CD4-long}
 ggplot(aids, aes(x = obstime, y = CD4, group = patient, colour = prevOI)) +
   geom_line(alpha = 0.2) +
-  scale_x_continuous('Days') +
+  scale_x_continuous('months') +
   theme_minimal() +
   ggtitle('CD4 count over time per patient, according to previous infection status')
 ```
@@ -213,15 +211,22 @@ ggplot(aids2 %>%
   theme(legend.position = 'none')
 ```
 
-_TODO fill in details about longitudinal model fit_
+Here we are fitting a longitudinal submodel of the form:
 
-We have fit several parameterizations of the longitudinal submodel. 
+  _ TODO describe long submodel _
+
+We have fit several parameterizations of the longitudinal submodel using `rstanarm::stan_glmer` 
+
+```{r long-describe-models}
+loo_comp_table %>% dplyr::select(model_name, description) %>% arrange(model_name) %>% dplyr::filter(model_name != 'long6') %>% print(right=F)
+```
 
 Using `LOO-PSIS` as a model-comparison criterion, we can sort models from the best fit (`long3`) to the worst (`long0`).
 
-```{r long-compare-models}
-loo_comp_table %>% dplyr::select(model_name, RHS, looic, se_looic) %>% print(right=F)
+```{r long-describe-models}
+loo_comp_table %>% dplyr::select(model_name, looic, se_looic) %>% print(right=F)
 ```
+
 
 From the perspective of model comparison, there are a few things to note:
 
@@ -259,10 +264,7 @@ At this point we are ready to fit the joint model for longitudinal & time-to-eve
 We start with a fit incorporating our work on the individual submodels.
 
 ```{r jm-fit}
-# TODO revert to f7 once that run has finished
-#print(f7)
-## for now, proceed with f3 as if it's f7
-f7 <- readRDS(file.path(CACHE_DIR, 'f3.rds'))
+f7 <- readRDS(file.path(CACHE_DIR, 'f7.rds'))
 print(f7)
 ```
 
@@ -275,8 +277,8 @@ Let's see how closely the estimated 'bs' baseline hazard matches our observed KM
 
 #### Summarize parameter estimates graphically
 
-```{r show-coefs-long}
-bayesplot::mcmc_areas(as.array(f7), regex_pars = '^Long1\\|[^(Intercept)|sigma]') + 
+```{r show-coefs-long, cache=F}
+bayesplot::mcmc_areas(as.array(f7), pars = paste('Long1', colnames(coefficients(long3)$patient)[-1], sep = '|')) + 
   bayesplot::vline_0() +
   ggtitle('Posterior parameter estimates for model fit with stan_jm', subtitle = 'f7: longitudinal submodel for assoc with sqrt(CD4) over time (obstime)')
 ```
@@ -312,7 +314,7 @@ There is also a weak but plausible trend towards improved survival with increasi
 Next we compare coefficient values from the longitudinal model fit to their counterparts in the `stan_jm` fit.
 
 ```{r compare-coefs-long}
-p_joint <- bayesplot::mcmc_areas(as.array(f7), regex_pars = '^Long1\\|[^(Intercept)|sigma]') + 
+p_joint <- bayesplot::mcmc_areas(as.array(f7), pars = paste('Long1', colnames(coefficients(long3)$patient)[-1], sep = '|')) + 
   bayesplot::vline_0() +
   ggtitle('Fit within Joint Model')
 
@@ -329,9 +331,13 @@ bayesplot::bayesplot_grid(p_joint, p_long,
 
 Now we get to the crux of the issue - namely, informing the treatment plan for an individual patient. 
 
-Given the model, you might think that we could simply trat all patients with `ddC`, since `ddI` is associated with higher hazard for mortality. 
+Given the model, you might think that we could simply treat all patients with `ddC`, since `ddI` is associated with higher hazard for mortality. 
 
-However, the picture may not be that simple.
+However, the picture may not be that simple. 
+
+First, the model is not simple. We have an interaction effect between treatment status & prevOI, but we also have slightly higher `CD4` counts with `ddI` (which is associated with improved survival) and slightly higher hazard with `ddI` (which is thus associated with worse survival). Our model also measures the drug effect _holding all other covariates equal_ .. including `CD4` count. But `CD4` count as we have seen often varies over time and across patients.
+
+Second, even if our model _were_ simple, the decision problem is itself complex.
 
 Consider:
 
@@ -346,7 +352,27 @@ Consider:
 
 In practice, we want to consider all of these factors when making a treatment decision. 
 
-### Is the benefit of `ddC` over `ddI` the same for all patients?
-
 ### Example for one patient
+
+For lack of a better name, we will call this first problem 'heterogenous treatment effects'. We will call the second problem the 'decision problem'.
+
+To start with a simple example, let's consider the case for a single patient. 
+
+```{r example-patient}
+# patient_id <- XX
+
+# get data for this patient
+
+# restrict to baseline data only
+
+# create fictional record with alternate treatment 
+
+# simulate data
+
+# plot expected survival under two scenarios
+
+# plot expected `CD4` counts under two scenarios
+```
+
+### Is the benefit of `ddC` over `ddI` the same for all patients?
 
