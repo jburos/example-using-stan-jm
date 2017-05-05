@@ -70,7 +70,8 @@ model_list <- list(long0 = long0, long1 = long1, long2 = long2, long3 = long3, l
 
 
 model_descriptions <- tbl_df(list(model_name = names(model_list),
-                                  RHS = lapply(model_list, FUN = function(x) as.character(x$formula)[3])))
+                                  description = unlist(lapply(model_list, FUN = function(x) paste(as.character(x$formula)[2], as.character(x$formula)[3], sep = ' ~ ')))
+                                  ))
 
 loo_comp_table <- as.data.frame(loo_comp) %>% 
   dplyr::mutate(model_name = gsub(rownames(.), pattern = '.loo', replacement = '')) %>%
