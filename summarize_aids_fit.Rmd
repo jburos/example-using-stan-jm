@@ -481,37 +481,6 @@ patient_ppsurv_alt <- with_filecache(
     extrapolate = TRUE,
     control = list(condition = FALSE)
   ), filename = paste0('f7.posterior_survfit2.alt_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
-
-# prepare posterior predictive densities of survival
-surv_density <- attr(patient_ppsurv, 'surv')
-surv_density_alt <- attr(patient_ppsurv_alt, 'surv')
-surv_density_data <- list()
-surv_density_data_alt <- list()
-surv_density_times <- dplyr::distinct(patient_ppsurv, obstime) %>% unlist()
-for (t in seq_len(length(surv_density))) {
-  surv_time <- surv_density_times[[t]]
-  surv_density_data[[t]] <- tbl_df(surv_density[[t]]) %>%
-    dplyr::mutate(iter = row_number()) %>%
-    tidyr::gather(patient, prop_survival, -iter) %>%
-    dplyr::mutate(obstime = surv_time) %>%
-    dplyr::left_join(patient_data.id %>% dplyr::select(-obstime),
-                     by = 'patient')
-  surv_density_data_alt[[t]] <- tbl_df(surv_density_alt[[t]]) %>%
-    dplyr::mutate(iter = row_number()) %>%
-    tidyr::gather(patient, prop_survival, -iter) %>%
-    dplyr::mutate(obstime = surv_time) %>%
-    dplyr::left_join(patient_data_alt.id %>% dplyr::select(-obstime),
-                     by = 'patient')
-}
-surv_density_df <- dplyr::bind_rows(surv_density_data) %>% 
-  dplyr::bind_rows(dplyr::bind_rows(surv_density_data_alt)) %>%
-  dplyr::group_by(iter, patient, drug) %>%
-  dplyr::mutate(prev_prop_survival = lag(prop_survival, order_by=desc(obstime), n=1, default = 0)) %>%
-  dplyr::ungroup() %>%
-  dplyr::mutate(one = 1) %>%
-  dplyr::full_join(tbl_df(list(prob = seq(from = 0, to = 1, by = 0.01), one = 1)), by = 'one') %>%
-  dplyr::filter(prob >= prev_prop_survival & prob <= prop_survival) %>%
-  dplyr::arrange(patient, drug, iter, prob)
 ```
 
 ```{r example-patients-baseline-plot-predcurve}
@@ -529,17 +498,6 @@ patient_ppsurv %>%
   theme_minimal() +
   scale_x_continuous('Months following treatment') +
   scale_y_continuous('Survival probability', labels = percent)
-  
-```
-
-```{r example-patients-baseline-plot-predsurv}
-surv_density_df %>%
-  dplyr::arrange(prevOI, patient) %>%
-ggplot(., aes(x = obstime, group = drug, colour = drug)) + 
-  geom_density() +
-  theme_minimal() +
-  facet_wrap(prevOI~patient, scales = 'free') +
-  scale_x_continuous('Posterior predicted survival (months)')
 ```
 
 #### Plot expected CD4 counts over time
@@ -602,8 +560,6 @@ patient_ppint %>%
   geom_ribbon(aes(ymin = `5%`, ymax = `95%`, colour = NULL, fill = drug), alpha = 0.2)
 ```
 
-### Is the benefit of `ddC` over `ddI` the same for all patients?
-
 ## Look at model `f8`
 
 As a comparison, look at model `f8` which includes CD4 count at baseline as a covariate in the survival submodel.
@@ -638,36 +594,6 @@ patient_ppsurv_alt8 <- with_filecache(
     control = list(condition = FALSE)
   ), filename = paste0('f8.posterior_survfit2.alt_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
 
-# prepare posterior predictive densities of survival
-surv_density <- attr(patient_ppsurv, 'surv')
-surv_density_alt <- attr(patient_ppsurv_alt, 'surv')
-surv_density_data <- list()
-surv_density_data_alt <- list()
-surv_density_times <- dplyr::distinct(patient_ppsurv, obstime) %>% unlist()
-for (t in seq_len(length(surv_density))) {
-  surv_time <- surv_density_times[[t]]
-  surv_density_data[[t]] <- tbl_df(surv_density[[t]]) %>%
-    dplyr::mutate(iter = row_number()) %>%
-    tidyr::gather(patient, prop_survival, -iter) %>%
-    dplyr::mutate(obstime = surv_time) %>%
-    dplyr::left_join(patient_data.id %>% dplyr::select(-obstime),
-                     by = 'patient')
-  surv_density_data_alt[[t]] <- tbl_df(surv_density_alt[[t]]) %>%
-    dplyr::mutate(iter = row_number()) %>%
-    tidyr::gather(patient, prop_survival, -iter) %>%
-    dplyr::mutate(obstime = surv_time) %>%
-    dplyr::left_join(patient_data_alt.id %>% dplyr::select(-obstime),
-                     by = 'patient')
-}
-surv_density_df8 <- dplyr::bind_rows(surv_density_data) %>% 
-  dplyr::bind_rows(dplyr::bind_rows(surv_density_data_alt)) %>%
-  dplyr::group_by(iter, patient, drug) %>%
-  dplyr::mutate(prev_prop_survival = lag(prop_survival, order_by=desc(obstime), n=1, default = 0)) %>%
-  dplyr::ungroup() %>%
-  dplyr::mutate(one = 1) %>%
-  dplyr::full_join(tbl_df(list(prob = seq(from = 0, to = 1, by = 0.01), one = 1)), by = 'one') %>%
-  dplyr::filter(prob >= prev_prop_survival & prob <= prop_survival) %>%
-  dplyr::arrange(patient, drug, iter, prob)
 ```
 
 ```{r example-patients-baseline-plot-predcurve-f8}
@@ -686,14 +612,4 @@ patient_ppsurv8 %>%
   scale_x_continuous('Months following treatment') +
   scale_y_continuous('Survival probability', labels = percent)
   
-```
-
-```{r}
-surv_density_df8 %>%
-  dplyr::arrange(prevOI, patient) %>%
-ggplot(., aes(x = obstime, group = drug, colour = drug)) + 
-  geom_density() +
-  theme_minimal() +
-  facet_wrap(prevOI~patient, scales = 'free') +
-  scale_x_continuous('Posterior predicted survival (months)')
 ```
