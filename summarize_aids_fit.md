@@ -568,10 +568,16 @@ Here we will consider only data known at baseline, then draw from the posterior 
 
 ``` r
 ggplot(with_aids_ddI_ppsurv %>% dplyr::mutate(drug = 'ddI', prevOI = 'AIDS') %>%
-         dplyr::bind_cols(with_aids_ddC_ppsurv %>% dplyr::mutate(drug = 'ddC', prevOI = 'AIDS')),
+         dplyr::bind_cols(with_aids_ddC_ppsurv %>% dplyr::mutate(drug = 'ddC', prevOI = 'AIDS')) %>%
+dplyr::bind_cols(no_aids_ddI_ppsurv %>% dplyr::mutate(drug = 'ddI', prevOI = 'noAIDS')) %>%
+  dplyr::bind_cols(no_aids_ddC_ppsurv %>% dplyr::mutate(drug = 'ddC', prevOI = 'noAIDS')),
        aes(x = obstime, y = survpred, group = drug, colour = drug)) +
   geom_line() +
-  facet_wrap(~prevOI)
+  geom_ribbon(aes(ymin = ci_lb, ymax = ci_ub, colour = NULL, fill = drug), alpha = 0.2) +
+  facet_wrap(~prevOI) +
+  theme_minimal() +
+  scale_y_continuous('Posterior-predicted survival', labels = percent) +
+  scale_x_continuous('Months')
 ```
 
 ![](summarize_aids_fit_files/figure-markdown_github/summ-drug-effect-aids-1.png)
