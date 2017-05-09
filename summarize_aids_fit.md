@@ -298,7 +298,9 @@ ggplot(aids2 %>%
 
 Here we are fitting a longitudinal submodel of the form:
 
-\_ TODO describe long submodel \_
+(*Y*|*B* = *b*)∼*N*(*X**β* + *Z**b* + *o*, *σ*<sup>2</sup>*W*<sup>−1</sup>)
+
+Where *Y* is our dependent variable (`CD4` count), *X* is a design matrix of covariates affecting `CD4` count, *Z* is a design matrix of subject-specific covariate values and *b* is a set of subject-specific parameters. The specification of the design matrices *X* and *Z* is made using `lmer` formula syntax.
 
 We have fit several parameterizations of the longitudinal submodel using `rstanarm::stan_glmer`
 
@@ -404,7 +406,6 @@ At this point we are ready to fit the joint model for longitudinal & time-to-eve
 We start with a fit incorporating our work on the individual submodels.
 
 ``` r
-f7 <- readRDS(file.path(CACHE_DIR, 'f7.rds'))
 print(f7)
 ```
 
@@ -451,10 +452,10 @@ print(f7)
 Let's see how closely the estimated 'bs' baseline hazard matches our observed KM curves.
 
 ``` r
-## TODO uncomment once finished
-#f7.ps_check <- readRDS(file.path(CACHE_DIR, 'f7.ps_check.rds'))
-#f7.ps_check
+f7.ps_check
 ```
+
+![](summarize_aids_fit_files/figure-markdown_github/jm-ps_check-1.png)
 
 #### Summarize parameter estimates graphically
 

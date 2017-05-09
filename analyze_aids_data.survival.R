@@ -128,8 +128,8 @@ f2.loo <- with_filecache(loo(f2),
                          filename = 'f2.loo.rds')
 f3.loo <- with_filecache(loo(f3),
                          filename = 'f3.loo.rds')
-f4.loo <- with_filecache(loo(f4),
-                         filename = 'f4.loo.rds')
+#f4.loo <- with_filecache(loo(f4),
+#                         filename = 'f4.loo.rds')
 f7.loo <- with_filecache(loo(f7),
                          filename = 'f7.loo.rds')
 f8.loo <- with_filecache(loo(f8),
@@ -137,7 +137,7 @@ f8.loo <- with_filecache(loo(f8),
 f9.loo <- with_filecache(loo(f8),
                          filename = 'f9.loo.rds')
 
-loo_comp <- loo::compare(f0.loo, f1.loo, f2.loo, f3.loo, f4.loo, f7.loo, f8.loo, f9.loo)
+loo_comp <- loo::compare(f0.loo, f1.loo, f2.loo, f3.loo, f7.loo, f8.loo, f9.loo)
 
 f7.ps_check <- with_filecache(rstanarm::ps_check(f7),
                               filename = 'f7.ps_check.rds')
