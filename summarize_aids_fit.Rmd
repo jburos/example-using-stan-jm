@@ -15,8 +15,8 @@ library(dplyr)
 library(scales)
 library(bayesplot)
 source('analyze_aids_data.longitudinal.without_kfold.R')
-source('analyze_aids_data.survival.R')
 source('posterior_survfit_by_prevOI_X_drug.R')
+source('analyze_aids_data.survival.R')
 ```
 
 ## Data summary
@@ -387,10 +387,12 @@ At the population level, how is the outcome different among patients with an AID
 Here we will consider only data known at baseline, then draw from the posterior predictive distribution under two treatment scenarios.
 
 ```{r summ-drug-effect-aids}
-ggplot(with_aids_ddI_ppsurv %>% dplyr::mutate(drug = 'ddI', prevOI = 'AIDS') %>%
+with_aids_ddI_ppsurv %>% 
+         dplyr::mutate(drug = 'ddI', prevOI = 'AIDS') %>%
          dplyr::bind_cols(with_aids_ddC_ppsurv %>% dplyr::mutate(drug = 'ddC', prevOI = 'AIDS')) %>%
-dplyr::bind_cols(no_aids_ddI_ppsurv %>% dplyr::mutate(drug = 'ddI', prevOI = 'noAIDS')) %>%
-  dplyr::bind_cols(no_aids_ddC_ppsurv %>% dplyr::mutate(drug = 'ddC', prevOI = 'noAIDS')),
+         dplyr::bind_cols(no_aids_ddI_ppsurv %>% dplyr::mutate(drug = 'ddI', prevOI = 'noAIDS')) %>%
+         dplyr::bind_cols(no_aids_ddC_ppsurv %>% dplyr::mutate(drug = 'ddC', prevOI = 'noAIDS')) %>%
+  ggplot(.,
        aes(x = obstime, y = survpred, group = drug, colour = drug)) +
   geom_line() +
   geom_ribbon(aes(ymin = ci_lb, ymax = ci_ub, colour = NULL, fill = drug), alpha = 0.2) +
