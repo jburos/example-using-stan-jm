@@ -78,10 +78,10 @@ stan_jm_fit <- with_filecache(
           formulaEvent = Surv(eventtime, event) ~ Z1 + Z2,
           dataEvent = dataEvent,
           assoc = 'etavalue',
-          init = 'random',
+          #init = 'random',
           iter = 5000,
           seed = 1234,
-          adapt_delta = 0.999
+          adapt_delta = 0.9999
           ),
-  filename = 'binomial_data_sim.stan_jm_fit.iter-5000.seed-1234.rda')
+  filename = 'binomial_data_sim.stan_jm_fit.iter-5000.seed-1234.model-based.rda')
 

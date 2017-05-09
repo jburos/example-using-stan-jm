@@ -70,18 +70,13 @@ survfit(Surv(eventtime, event) ~ Z1, data = dataEvent) %>%
 
 ## ---- fit joint model ----
 
-stan_jm_fit <- with_filecache(
-  stan_jm(formulaLong = Yij_1 ~ Z1 + Z2 + tij + (1 + tij | id),
-          dataLong = dataLong,
-          family = list(binomial),
-          time_var = 'tij',
-          formulaEvent = Surv(eventtime, event) ~ Z1 + Z2,
-          dataEvent = dataEvent,
-          assoc = 'etavalue',
-          init = 'random',
-          iter = 5000,
-          seed = 1234,
-          adapt_delta = 0.999
-          ),
-  filename = 'binomial_data_sim.stan_jm_fit.iter-5000.seed-1234.rda')
+stan_jm_fit <- readRDS(file.path(CACHE_DIR, 'binomial_data_sim.stan_jm_fit.rda'))
 
+## ---- summarize parameter recovery ----
+
+trueparams <- c('betaLong_binary', 'betaLong_continuous', 'betaLong_slope')
+params <- c('Long1|Z1', 'Long1|Z2', 'Long1|tij')
+
+paramvals <- as.array(stan_jm_fit)[, , params, drop = FALSE]
+truevals <- as.numeric(attr(simdat, 'params')[trueparams])
+bayesplot::mcmc_recover_hist(paramvals, truevals, facet_args = list(scales = 'free', ncol = 1))
