@@ -1,0 +1,10 @@
+name: "stan-jm-examples"
+output_dir: "docs"
+exclude: ["*.stan", "*.rda", "exploration", "GDCdata", "Rlib", "summarize_aids_fit.Rmd"]
+navbar:
+  title: "Example use cases for stan_jm"
+  left:
+    - text: "Home"
+      href: index.html
+    - text: "Analysis of `AIDS` data"
+      href: analysis_of_aids_data.html
