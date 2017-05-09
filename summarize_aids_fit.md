@@ -651,7 +651,9 @@ patient_ppint %>%
   ggplot(., aes(x = obstime, y = median, group = drug, colour = drug)) + 
   geom_line() +
   facet_wrap(prevOI ~ patient) +
-  geom_ribbon(aes(ymin = `5%`, ymax = `95%`, colour = NULL, fill = drug), alpha = 0.2)
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`, colour = NULL, fill = drug), alpha = 0.2) +
+  theme_minimal() +
+  scale_y_continuous('CD4 count')
 ```
 
     ## Warning in bind_rows_(x, .id): binding factor and character vector,
