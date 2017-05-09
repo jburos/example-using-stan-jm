@@ -570,9 +570,9 @@ Here we will consider only data known at baseline, then draw from the posterior 
 ``` r
 with_aids_ddI_ppsurv %>% 
          dplyr::mutate(drug = 'ddI', prevOI = 'AIDS') %>%
-         dplyr::bind_cols(with_aids_ddC_ppsurv %>% dplyr::mutate(drug = 'ddC', prevOI = 'AIDS')) %>%
-         dplyr::bind_cols(no_aids_ddI_ppsurv %>% dplyr::mutate(drug = 'ddI', prevOI = 'noAIDS')) %>%
-         dplyr::bind_cols(no_aids_ddC_ppsurv %>% dplyr::mutate(drug = 'ddC', prevOI = 'noAIDS')) %>%
+         dplyr::bind_rows(with_aids_ddC_ppsurv %>% dplyr::mutate(drug = 'ddC', prevOI = 'AIDS')) %>%
+         dplyr::bind_rows(no_aids_ddI_ppsurv %>% dplyr::mutate(drug = 'ddI', prevOI = 'noAIDS')) %>%
+         dplyr::bind_rows(no_aids_ddC_ppsurv %>% dplyr::mutate(drug = 'ddC', prevOI = 'noAIDS')) %>%
   ggplot(.,
        aes(x = obstime, y = survpred, group = drug, colour = drug)) +
   geom_line() +
