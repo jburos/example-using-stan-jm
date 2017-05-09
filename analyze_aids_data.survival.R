@@ -10,9 +10,6 @@ source('with_filecache.function.R')
 data('aids', package = 'JM')
 data('aids.id', package = 'JM')
 
-str(aids)
-str(aids.id)
-
 aids2 <- aids %>%
   dplyr::mutate(sqrt_cd4 = sqrt(CD4))
 
