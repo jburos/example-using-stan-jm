@@ -7,6 +7,7 @@ install.packages('dplyr')
 install.packages('survminer')
 install.packages('stringr') ## without this, docopt install sometimes fails
 install.packages('docopt')
+install.packages('roxygen2')
 install.packages('DT')
 # devtools::install_github('sambrilleman/rstanarm', ref = 'develop2', args = '--preclean', local = TRUE)
 devtools::install_github('jburos/rstanarm', ref = 'fix-posterior-predict-newdata',  args = '--preclean', local = TRUE)
