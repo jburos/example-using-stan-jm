@@ -568,10 +568,12 @@ At the population level, how is the outcome different among patients with an AID
 Here we will consider only data known at baseline, then draw from the posterior predictive distribution under two treatment scenarios.
 
 ``` r
-ggplot(with_aids_ddI_ppsurv %>% dplyr::mutate(drug = 'ddI', prevOI = 'AIDS') %>%
+with_aids_ddI_ppsurv %>% 
+         dplyr::mutate(drug = 'ddI', prevOI = 'AIDS') %>%
          dplyr::bind_cols(with_aids_ddC_ppsurv %>% dplyr::mutate(drug = 'ddC', prevOI = 'AIDS')) %>%
-dplyr::bind_cols(no_aids_ddI_ppsurv %>% dplyr::mutate(drug = 'ddI', prevOI = 'noAIDS')) %>%
-  dplyr::bind_cols(no_aids_ddC_ppsurv %>% dplyr::mutate(drug = 'ddC', prevOI = 'noAIDS')),
+         dplyr::bind_cols(no_aids_ddI_ppsurv %>% dplyr::mutate(drug = 'ddI', prevOI = 'noAIDS')) %>%
+         dplyr::bind_cols(no_aids_ddC_ppsurv %>% dplyr::mutate(drug = 'ddC', prevOI = 'noAIDS')) %>%
+  ggplot(.,
        aes(x = obstime, y = survpred, group = drug, colour = drug)) +
   geom_line() +
   geom_ribbon(aes(ymin = ci_lb, ymax = ci_ub, colour = NULL, fill = drug), alpha = 0.2) +
