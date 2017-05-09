@@ -639,18 +639,6 @@ patient_ppsurv %>%
 
 ![](summarize_aids_fit_files/figure-markdown_github/example-patients-baseline-plot-predcurve-1.png)
 
-``` r
-surv_density_df %>%
-  dplyr::arrange(prevOI, patient) %>%
-ggplot(., aes(x = obstime, group = drug, colour = drug)) + 
-  geom_density() +
-  theme_minimal() +
-  facet_wrap(prevOI~patient, scales = 'free') +
-  scale_x_continuous('Posterior predicted survival (months)')
-```
-
-![](summarize_aids_fit_files/figure-markdown_github/example-patients-baseline-plot-predsurv-1.png)
-
 #### Plot expected CD4 counts over time
 
 ``` r
@@ -667,8 +655,6 @@ patient_ppint %>%
     ## coercing into character vector
 
 ![](summarize_aids_fit_files/figure-markdown_github/unnamed-chunk-4-1.png)
-
-### Is the benefit of `ddC` over `ddI` the same for all patients?
 
 Look at model `f8`
 ------------------
@@ -742,15 +728,3 @@ patient_ppsurv8 %>%
     ## coercing into character vector
 
 ![](summarize_aids_fit_files/figure-markdown_github/example-patients-baseline-plot-predcurve-f8-1.png)
-
-``` r
-surv_density_df8 %>%
-  dplyr::arrange(prevOI, patient) %>%
-ggplot(., aes(x = obstime, group = drug, colour = drug)) + 
-  geom_density() +
-  theme_minimal() +
-  facet_wrap(prevOI~patient, scales = 'free') +
-  scale_x_continuous('Posterior predicted survival (months)')
-```
-
-![](summarize_aids_fit_files/figure-markdown_github/unnamed-chunk-7-1.png)

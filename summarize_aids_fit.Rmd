@@ -437,6 +437,7 @@ For lack of a better name, we will call this first problem 'heterogenous treatme
 To start with a simple example, let's consider the case for a few patients. 
 
 ```{r example-patients-baseline, include=FALSE}
+# select 3 patients at random from each group (prevOI vs not)
 patient_ids <- aids.id %>% 
   dplyr::group_by(prevOI) %>%
   dplyr::distinct(patient) %>% 
@@ -444,7 +445,7 @@ patient_ids <- aids.id %>%
   dplyr::ungroup() %>%
   dplyr::select(-prevOI)
 
-# get data for this patient at baseline
+# get data for these patients at baseline
 patient_data <- aids2 %>%
   dplyr::semi_join(patient_ids, by='patient') %>%
   dplyr::filter(obstime == min(obstime))
@@ -503,6 +504,11 @@ patient_ppsurv %>%
 #### Plot expected CD4 counts over time
 
 ```{r, include=FALSE}
+# timepoints at which to predict CD4 counts
+observed_times <- aids %>%
+  dplyr::distinct(obstime) %>%
+  unlist()
+
 # prepare predicted cd4 counts under each scenario
 patient_ppdata <- with_filecache(
   rstanarm::posterior_predict(
@@ -511,7 +517,7 @@ patient_ppdata <- with_filecache(
     newdata = patient_data %>% 
       dplyr::select(-obstime) %>%
       mutate(one = 1) %>%
-      dplyr::full_join(tbl_df(list(obstime = surv_density_times)) %>% dplyr::mutate(one = 1),
+      dplyr::full_join(tbl_df(list(obstime = observed_times)) %>% dplyr::mutate(one = 1),
                        by='one') %>% 
       dplyr::arrange(patient, obstime)
   ), filename = paste0('f7.posterior_predict2.treated_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
@@ -524,7 +530,7 @@ patient_ppdata_alt <- with_filecache(
     newdata = patient_data_alt %>%
       dplyr::select(-obstime) %>%
       mutate(one = 1) %>%
-      dplyr::full_join(tbl_df(list(obstime = surv_density_times)) %>% dplyr::mutate(one = 1),
+      dplyr::full_join(tbl_df(list(obstime = observed_times)) %>% dplyr::mutate(one = 1),
                        by='one') %>% 
       dplyr::arrange(patient, obstime)
   ), filename = paste0('f7.posterior_predict2.alt_effect_patient',paste(unlist(patient_ids), collapse = '_'),'.rds'))
@@ -533,7 +539,7 @@ patient_ppdata_alt <- with_filecache(
 patient_ppint_alt <- patient_data_alt %>% 
   dplyr::select(-obstime) %>%
   dplyr::mutate(one = 1) %>%
-  dplyr::full_join(tbl_df(list(obstime = surv_density_times, one = 1)), by = 'one') %>%
+  dplyr::full_join(tbl_df(list(obstime = observed_times, one = 1)), by = 'one') %>%
   dplyr::arrange(patient, obstime) %>%
   dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata_alt))) %>%
   dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata_alt, prob = 0.01))) %>%
@@ -542,7 +548,7 @@ patient_ppint_alt <- patient_data_alt %>%
 patient_ppint <- patient_data %>%
   dplyr::select(-obstime) %>%
   dplyr::mutate(one = 1) %>%
-  dplyr::full_join(tbl_df(list(obstime = surv_density_times, one = 1)), by = 'one') %>%
+  dplyr::full_join(tbl_df(list(obstime = observed_times, one = 1)), by = 'one') %>%
   dplyr::arrange(patient, obstime) %>%
   dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata))) %>%
   dplyr::bind_cols(as.data.frame(posterior_interval(patient_ppdata_alt, prob = 0.01))) %>%
