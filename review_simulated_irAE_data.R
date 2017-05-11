@@ -72,6 +72,10 @@ survfit(Surv(eventtime, event) ~ Z1, data = dataEvent) %>%
 
 stan_jm_fit <- readRDS(file.path(CACHE_DIR, 'binomial_data_sim.stan_jm_fit.rda'))
 
+## ---- review model fit ----
+
+ps_check(stan_jm_fit)
+
 ## ---- summarize parameter recovery ----
 
 trueparams <- c('betaLong_binary', 'betaLong_continuous', 'betaLong_slope')
