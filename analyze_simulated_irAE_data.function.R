@@ -104,8 +104,8 @@ analyze_simulated_irae_data <- function(max_treedepth = 15,
     truevals <- as.numeric(attr(simdat, 'params')[trueparams])
     recovery_plot <- bayesplot::mcmc_recover_hist(paramvals, truevals, facet_args = list(scales = 'free', ncol = 1))
     
-    structure(simdat = simdat,
-              stan_jm_fit = stan_jm_fit,
+    structure(stan_jm_fit,
+              simdat = simdat,
               ps_check = ps_check,
               recovery_plot = recovery_plot,
               dataLong = dataLong,
