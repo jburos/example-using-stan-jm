@@ -45,17 +45,17 @@ survfit(Surv(eventtime, event) ~ Z1, data = dataEvent) %>%
 ## ---- fit naive models to long data ---- 
 
 ## glm on binary event outcome
-(glm_fit <- glm(Yij_1 ~ Z1 + Z2 + tij,
+summary(glm_fit <- glm(Yij_1 ~ Z1 + Z2 + tij,
                data = dataLong,
                family = binomial()
                ))
 
 ## similar results using glmer, accounting for clustering by id
-(glmer_fit1 <- glmer(Yij_1 ~ Z1 + Z2 + tij + (1 | id),
+summary(glmer_fit1 <- glmer(Yij_1 ~ Z1 + Z2 + tij + (1 | id),
                     data = dataLong,
                     family = binomial()
                     ))
-(glmer_fit2 <- glmer(Yij_1 ~ Z1 + Z2 + tij + (1 + tij |id),
+summary(glmer_fit2 <- glmer(Yij_1 ~ Z1 + Z2 + tij + (1 + tij |id),
                     data = dataLong,
                     family = binomial()
                     ))
@@ -70,7 +70,7 @@ survfit(Surv(eventtime, event) ~ Z1, data = dataEvent) %>%
 
 ## ---- fit joint model ----
 
-stan_jm_fit <- with_filecache(
+summary(stan_jm_fit <- with_filecache(
   stan_jm(formulaLong = Yij_1 ~ Z1 + Z2 + tij + (1 + tij | id),
           dataLong = dataLong,
           family = list(binomial),
@@ -83,5 +83,20 @@ stan_jm_fit <- with_filecache(
           seed = 1234,
           adapt_delta = 0.9999
           ),
-  filename = 'binomial_data_sim.stan_jm_fit.iter-5000.seed-1234.model-based.rda')
+  filename = 'binomial_data_sim.stan_jm_fit.iter-5000.seed-1234.model-based.rda'))
+
+## ---- review fit model ---- 
+
+rstan::stan_diag(stan_jm_fit, info = 'sample')
+pairs(stan_jm_fit, regex_pars = "^(Assoc|Event)\\|.*$")
+pairs(stan_jm_fit, regex_pars = "^Assoc\\|.*$")
+
+## ---- summarize parameter recovery ----
+
+trueparams <- c('betaLong_binary', 'betaLong_continuous', 'betaLong_slope')
+params <- c('Long1|Z1', 'Long1|Z2', 'Long1|tij')
+
+paramvals <- as.array(stan_jm_fit)[, , params, drop = FALSE]
+truevals <- as.numeric(attr(simdat, 'params')[trueparams])
+bayesplot::mcmc_recover_hist(paramvals, truevals, facet_args = list(scales = 'free', ncol = 1))
 
