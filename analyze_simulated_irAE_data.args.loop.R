@@ -6,7 +6,7 @@ options:
  --runs=<int>            how many runs to execute [default: 20]
  --stan_seed=<int>       stan_seed [default: 1234]
  --iter=<int>            number of iterations [default: 8000]
- --init=<chr>            init type (random or model_based) [default: model_based]
+ --init=<chr>            init type (random or model_based) [default: random]
  --max_treedepth=<int>   max_treedepth [default: 15]
  --adapt_delta=<float>   adapt_delta parameter [default: 0.9999]
  --basehaz=<chr>         basehaz parameter (weibull, bs, or piecewise) [default: weibull]
@@ -38,7 +38,7 @@ if (opts['seed'] == 'random') {
   seedlist <- as.integer(opts['seed'])
 }
 if (opts['n'] == 'sequence') {
-  nlist <- c(200, 500, 800, 1000, 1200)
+  nlist <- c(200, 500)
 } else {
   nlist <- as.integer(opts['n'])
 }

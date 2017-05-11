@@ -7,7 +7,7 @@ library(ggplot2)
 library(lme4)
 library(stringr)
 library(purrr)
-options(mc.cores = min(parallel::detectCores(), 4))
+options(mc.cores = min(parallel::detectCores(), 6))
 source('with_filecache.function.R')
 
 #' generate cache filename
