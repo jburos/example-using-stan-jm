@@ -28,9 +28,9 @@ with_filecache <- function(expr, filename, cache_dir=CACHE_DIR, parse=NULL) {
     
     ## evaluate expr
     if (parse) {
-        obj = eval(parse(text=expr));	
+        obj = eval(parse(text=expr), envir = parent.frame());	
     } else {
-        obj = eval(expr)
+        obj = eval(expr, envir = parent.frame())
     }
     
     saveRDS(obj, file = cache_file, compress = TRUE)
