@@ -6,3 +6,4 @@ Rlib
 .Rcache
 *.rda
 GDCdata
+*.log
